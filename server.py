@@ -138,7 +138,7 @@ def build_command(job: dict) -> list[str]:
     return [tokens.get(part, part) for part in job["command"]]
 
 
-def build_env(job: dict, summary_path: Path) -> dict:
+def build_env(job: dict) -> dict:
     env = dict(BASE_ENV, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
     if job.get("env_file"):
         # For projects that expect their .env exported by the shell.
@@ -148,9 +148,6 @@ def build_env(job: dict, summary_path: Path) -> dict:
     if "{mvn}" in job["command"] and JAVA_HOME:
         env["JAVA_HOME"] = JAVA_HOME
         env["PATH"] = str(Path(JAVA_HOME) / "bin") + os.pathsep + env.get("PATH", "")
-    result = job.get("result", {})
-    if result.get("env"):
-        env[result["env"]] = str(summary_path)
     return env
 
 
@@ -252,10 +249,10 @@ def _finish(job: dict, run_id: str, **fields) -> None:
         _active.pop(job["id"], None)
 
 
-def _watch_local(job: dict, run_id: str, process: subprocess.Popen, log_file, started_ts: float, summary_path: Path) -> None:
+def _watch_local(job: dict, run_id: str, process: subprocess.Popen, log_file, started_ts: float) -> None:
     exit_code = process.wait()
     log_file.close()
-    summary = parsers.parse(job.get("result", {}), job_cwd(job), summary_path, exit_code, started_ts)
+    summary = parsers.parse(job.get("result", {}), job_cwd(job), log_path(run_id), exit_code, started_ts)
     _finish(job, run_id, status=summary["overall_status"].lower(), exit_code=exit_code, summary=summary,
             reports=run_reports(job, started_ts))
 
@@ -329,12 +326,11 @@ def start_run(job_id: str, user: str) -> tuple[bool, str]:
             threading.Thread(target=_follow_jenkins, args=(job, run_id, stop), daemon=True).start()
             return True, run_id
 
-        summary_path = LOG_DIR / f"{run_id}.summary.json"
         log_file = open(log_path(run_id), "w", encoding="utf-8", buffering=1)
         log_file.write(f"[dashboard] {job['name']} started by {user} - {' '.join(job['command'])}\n")
         try:
             process = subprocess.Popen(
-                build_command(job), cwd=str(job_cwd(job)), env=build_env(job, summary_path),
+                build_command(job), cwd=str(job_cwd(job)), env=build_env(job),
                 stdout=log_file, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
                 start_new_session=os.name != "nt",  # own process group, so Stop can kill the whole tree
@@ -346,7 +342,7 @@ def start_run(job_id: str, user: str) -> tuple[bool, str]:
         runs.insert(0, record)
         save_runs(runs)
         _active[job_id] = {"run_id": run_id, "process": process, "stop": stop, "build_url": None}
-    threading.Thread(target=_watch_local, args=(job, run_id, process, log_file, started_ts, summary_path),
+    threading.Thread(target=_watch_local, args=(job, run_id, process, log_file, started_ts),
                      daemon=True).start()
     return True, run_id
 

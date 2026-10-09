@@ -10,7 +10,7 @@
       "cwd": "../Reminder-Sanity-Automation",
       "command": ["{python}", "-u", "runners/run_all_reminders_sanity.py"],
       "requires": [".env"],
-      "result": {"type": "summary_json", "env": "REMINDER_SANITY_SUMMARY_PATH"},
+      "result": {"type": "reminder_sanity", "glob": "reports/output/reminder_sanity_multi_report_*.html"},
       "reports": [
         {"label": "HTML report", "glob": "reports/output/reminder_sanity_multi_report_*.html"},
         {"label": "PDF", "glob": "reports/output/reminder_sanity_multi_report_*.pdf"}

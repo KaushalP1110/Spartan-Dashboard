@@ -11,7 +11,9 @@ earlier run is never shown as this run's result.
 
 from __future__ import annotations
 
+import html
 import json
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -42,27 +44,65 @@ def _status_from_counts(passed: int, total: int, exit_code: int) -> str:
     return "PASS" if passed == total and exit_code == 0 else "FAIL"
 
 
-def parse_summary_json(cfg: dict, cwd: Path, summary_path: Path, exit_code: int, started_ts: float) -> dict:
-    """Reminder Sanity's own summary (runner writes it when the dashboard
-    sets REMINDER_SANITY_SUMMARY_PATH)."""
-    if not _fresh(summary_path, started_ts):
-        return _empty("ERROR", "Run ended before writing its result (see log)")
+def _text(fragment: str) -> str:
+    """HTML fragment -> plain text."""
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", fragment)).split())
+
+
+def parse_reminder_sanity(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
+    """Reminder Sanity, read from what a normal run already produces (the
+    project itself is not changed for the dashboard):
+
+    - per-section counts: the stat tiles at the top of its HTML report
+      (same counting as the report and the Chat card)
+    - failures: the report's FAIL rows (tables) and FAIL row cards
+    - overall: the "Overall: PASS|FAIL" line of its console report (the log)
+    - Drive link: the file id it logs after uploading the PDF
+    """
+    log = ""
     try:
-        data = json.loads(summary_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        return _empty("ERROR", f"Unreadable result file: {exc}")
-    status = data.get("overall_status") or "ERROR"
-    return {
-        "overall_status": status if status in ("PASS", "FAIL") else "ERROR",
-        "passed": data.get("passed"), "total": data.get("total"),
-        "sections": [{"title": s["title"], "passed": s["passed"], "total": s["total"]} for s in data.get("sections", [])],
-        "failures": [{"section": f.get("section", ""), "name": f.get("patient", ""), "reason": f.get("reason", "")}
-                     for f in data.get("failures", [])],
-        "error": data.get("error"), "drive_url": data.get("drive_url"),
-    }
+        log = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        pass
+    report = newest_match(cwd, cfg["glob"], started_ts)
+    if report is None:
+        failed = re.findall(r"Reminder Sanity run failed: (.+)", log)
+        return _empty("ERROR", failed[-1].strip() if failed else "Run ended before writing its report (see log)")
+    try:
+        page = report.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return _empty("ERROR", f"Unreadable report: {exc}")
+
+    sections = [{"title": _text(title), "passed": int(passed), "total": int(total)} for title, passed, total in re.findall(
+        r'<div class="stat-label">(.*?)</div><div class="stat-value">(\d+)/(\d+)', page)]
+
+    failures = []
+    for card in page.split('<div class="card">')[1:]:
+        heading = re.search(r"<h2>(.*?)</h2>", card, re.S)
+        section = _text(heading.group(1)).split(" \u2014 ")[0] if heading else ""
+        for row in re.findall(r'<tr class="fail">(.*?)</tr>', card, re.S):
+            cells = [_text(c) for c in re.findall(r"<td>(.*?)</td>", row, re.S)]
+            if len(cells) >= 4:
+                failures.append({"section": section, "name": cells[1], "reason": cells[3]})
+        for row in re.findall(r'<div class="row fail">(.*?)<div class="proof">(.*?)</div>', card, re.S):
+            title = re.search(r'<div class="row-title">(.*?)</div>', row[0], re.S)
+            failures.append({"section": section, "name": _text(title.group(1)) if title else "", "reason": _text(row[1])})
+
+    overall = re.findall(r"^Overall: (PASS|FAIL)\s*$", log, re.M)
+    passed, total = sum(s["passed"] for s in sections), sum(s["total"] for s in sections)
+    if overall:
+        status = overall[-1]
+    else:  # no console summary captured - fall back to the exit code
+        status = "PASS" if exit_code == 0 else "FAIL"
+    drive_ids = re.findall(r"Google Drive \(id=([\w-]+)\)|new revision \(id=([\w-]+)\)", log)
+    drive_id = next((a or b for a, b in reversed(drive_ids)), None)
+    summary = _empty(status)
+    summary.update(passed=passed, total=total, sections=sections, failures=failures,
+                   drive_url=f"https://drive.google.com/file/d/{drive_id}/view" if drive_id else None)
+    return summary
 
 
-def parse_recall_results(cfg: dict, cwd: Path, summary_path: Path, exit_code: int, started_ts: float) -> dict:
+def parse_recall_results(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
     """Recall-Status-Automation's recall_status_results_<stamp>.json."""
     path = newest_match(cwd, cfg["glob"], started_ts)
     if path is None:
@@ -84,7 +124,7 @@ def parse_recall_results(cfg: dict, cwd: Path, summary_path: Path, exit_code: in
     return summary
 
 
-def parse_testng(cfg: dict, cwd: Path, summary_path: Path, exit_code: int, started_ts: float) -> dict:
+def parse_testng(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
     """TestNG's testng-results.xml (Maven Surefire writes it)."""
     path = cwd / cfg["path"]
     if not _fresh(path, started_ts):
@@ -119,22 +159,22 @@ def parse_testng(cfg: dict, cwd: Path, summary_path: Path, exit_code: int, start
     return summary
 
 
-def parse_exit_code(cfg: dict, cwd: Path, summary_path: Path, exit_code: int, started_ts: float) -> dict:
+def parse_exit_code(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
     return _empty("PASS" if exit_code == 0 else "FAIL",
                   None if exit_code == 0 else f"Exited with code {exit_code} (see log and report)")
 
 
 PARSERS = {
-    "summary_json": parse_summary_json,
+    "reminder_sanity": parse_reminder_sanity,
     "recall_results": parse_recall_results,
     "testng": parse_testng,
     "exit_code": parse_exit_code,
 }
 
 
-def parse(cfg: dict, cwd: Path, summary_path: Path, exit_code: int, started_ts: float) -> dict:
+def parse(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
     parser = PARSERS.get(cfg.get("type", "exit_code"), parse_exit_code)
     try:
-        return parser(cfg, cwd, summary_path, exit_code, started_ts)
+        return parser(cfg, cwd, log_path, exit_code, started_ts)
     except Exception as exc:  # noqa: BLE001 - a parser bug must not lose the run
         return _empty("ERROR", f"Could not read results: {exc}")

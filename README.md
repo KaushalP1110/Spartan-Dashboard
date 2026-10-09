@@ -6,7 +6,7 @@ the failures that need attention, and links to every report - all in one place.
 
 | Automation | Runs | Result shown from |
 |---|---|---|
-| Reminder Sanity | `python runners/run_all_reminders_sanity.py` | the runner's summary JSON (+ HTML/PDF/Drive links) |
+| Reminder Sanity | `python runners/run_all_reminders_sanity.py` | its HTML report + console summary (+ HTML/PDF/Drive links) |
 | Recall Status | `python runners/run_recall_status_check.py` | `recall_status_results_*.json` (+ HTML/PDF) |
 | Spartan API | `mvn -B test` | `target/surefire-reports/testng-results.xml` (+ comparison report) |
 | Cron Reporting | `mvn -B test` | `testng-results.xml` (+ Excel export) |
@@ -148,8 +148,8 @@ Edit `jobs.json` and restart. A local job:
 }
 ```
 
-Result types: `summary_json` (file path passed in the env var named by `env`),
-`recall_results`, `testng`, `exit_code`. Only files matching a job's `reports`
+Result types: `reminder_sanity`, `recall_results`, `testng`, `exit_code`.
+No automation is changed for the dashboard - each is read from its normal output. Only files matching a job's `reports`
 globs can be opened from the dashboard.
 
 A Jenkins job: `"type": "jenkins"`, `"jenkins_job": "Folder/Job"`, optional
