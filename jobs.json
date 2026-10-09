@@ -54,7 +54,7 @@
       "requires": [".env"],
       "result": {"type": "testng", "path": "target/surefire-reports/testng-results.xml"},
       "links": [
-        {"label": "Configure (Spartan UI)", "url": "http://172.16.1.89:8090"}
+        {"label": "Configure (Spartan UI)", "url": "http://172.16.1.89:8102"}
       ],
       "warning": "Edit settings in the Spartan UI; don't start tests there at the same time.",
       "reports": [

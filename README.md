@@ -19,8 +19,12 @@ it by hand**, so Jenkins/CLI runs and dashboard runs behave the same.
 ## Run it in Docker (office network)
 
 It is the `spartan-dashboard` service in **spartan's `docker-compose.yml`**,
-next to the existing **spartan-ui** (port 8090), on the office Docker host
-(172.16.1.89). Open it at **http://172.16.1.89:8091**.
+next to **spartan-ui**, on the office Docker host (172.16.1.89). Like
+spartan-ui it publishes **no host port**: it is reached only through the QA
+portal (portal login + audit log). Traefik reaches it privately as
+`http://spartan-dashboard:8765` over `portal-tools-net`, so the portal stack
+needs a route for it - give it its own entrypoint/port or host, not a path
+prefix (the dashboard uses absolute paths such as `/api` and `/files`).
 
 1. On the Docker host, put all projects side by side in one folder:
    ```
@@ -112,7 +116,8 @@ Sessions last 12 hours and are cleared when the dashboard restarts.
 - **One run per automation at a time.** Reminder Sanity and the Template
   Setter both repoint the location-wide reminder templates, so they share a
   lock: while one runs, the other's Run button is disabled.
-- The Spartan card links to the existing Spartan UI for editing its `.env`.
+- The Spartan card links to the existing Spartan UI (via the QA portal,
+  `http://172.16.1.89:8102`) for editing its `.env`.
   Don't start tests there while the dashboard runs Spartan - both use the
   same folder.
 - **Stop** kills the run (the whole process tree). Whatever it already set
