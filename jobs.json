@@ -153,6 +153,41 @@
         }
       ],
       "est_minutes": 5
+    },
+    {
+      "id": "reminder_ui",
+      "name": "Reminder UI",
+      "description": "Playwright suite for Birthday Wishes, Scheduled Confirmation, Appointment and Recall Reminders, Auto Recall, Appointment Insights and Eyewear Reminders.",
+      "kind": "Playwright",
+      "type": "local",
+      "cwd": "../Reminder-UI-Automation-PW",
+      "command": [
+        "{npx}",
+        "playwright",
+        "test"
+      ],
+      "requires": [
+        "node_modules",
+        "test-data/credentials.js",
+        "reporting.config.mjs"
+      ],
+      "result": {
+        "type": "playwright_summary",
+        "glob": "test-reports/*/report.txt"
+      },
+      "reports": [
+        {
+          "label": "HTML report",
+          "glob": "test-reports/*/playwright-report/index.html",
+          "assets": "test-reports/*/playwright-report/data/*"
+        },
+        {
+          "label": "Summary",
+          "glob": "test-reports/*/report.txt"
+        }
+      ],
+      "warning": "Creates and deletes reminder templates on real locations and posts the summary to Google Chat. Don't run it while its Jenkins job is running.",
+      "est_minutes": 10
     }
   ]
 }

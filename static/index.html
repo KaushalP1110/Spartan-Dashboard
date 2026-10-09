@@ -14,7 +14,7 @@
     --fail: #b42318; --fail-bg: #fef3f2; --fail-bar: #f04438;
     --run: #b54708; --run-bg: #fffaeb; --run-bar: #f79009;
     --idle: #475467; --idle-bg: #f2f4f7; --idle-bar: #d0d5dd;
-    --py: #2563eb; --py-bg: #eff4ff; --mvn: #c4320a; --mvn-bg: #fff4ed; --ci: #7a2e0e; --ci-bg: #fef6ee;
+    --py: #2563eb; --py-bg: #eff4ff; --mvn: #c4320a; --mvn-bg: #fff4ed; --ci: #7a2e0e; --ci-bg: #fef6ee; --pw: #067647; --pw-bg: #ecfdf3;
     --log-bg: #0b1220; --log-text: #cbd5e1;
     --shadow: 0 1px 2px rgba(16,24,40,.05); --shadow-lg: 0 24px 48px -12px rgba(16,24,40,.25);
   }
@@ -27,7 +27,7 @@
       --fail: #f97066; --fail-bg: #3a1513; --fail-bar: #f04438;
       --run: #fdb022; --run-bg: #33240a; --run-bar: #f79009;
       --idle: #a3adbf; --idle-bg: #1f2838; --idle-bar: #3a4760;
-      --py: #84adff; --py-bg: #172446; --mvn: #ff9c66; --mvn-bg: #3a1d10; --ci: #f7b27a; --ci-bg: #33200f;
+      --py: #84adff; --py-bg: #172446; --mvn: #ff9c66; --mvn-bg: #3a1d10; --ci: #f7b27a; --ci-bg: #33200f; --pw: #75e0a7; --pw-bg: #0f2a1d;
       --log-bg: #05080e; --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 24px 48px -12px rgba(0,0,0,.6);
     }
   }
@@ -93,6 +93,7 @@
   .kind-ic.Python { background: var(--py-bg); color: var(--py); }
   .kind-ic.Maven { background: var(--mvn-bg); color: var(--mvn); }
   .kind-ic.Jenkins { background: var(--ci-bg); color: var(--ci); }
+  .kind-ic.Playwright { background: var(--pw-bg); color: var(--pw); }
   .job-title { flex: 1; min-width: 0; }
   .job-name { font-weight: 650; font-size: 1rem; line-height: 1.3; }
   .job-meta { color: var(--muted); font-size: .78rem; }
@@ -302,7 +303,7 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const icon = (name, cls = "i") => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
-const KIND_LABEL = {Python: "Py", Maven: "Mvn", Jenkins: "CI"};
+const KIND_LABEL = {Python: "Py", Maven: "Mvn", Jenkins: "CI", Playwright: "PW"};
 const STATUS_LABEL = {pass: "Passed", fail: "Failed", error: "Error", running: "Running", stopped: "Stopped", interrupted: "Interrupted", never: "Not run yet", setup: "Setup needed"};
 
 let state = null;

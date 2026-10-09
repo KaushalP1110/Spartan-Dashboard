@@ -159,6 +159,43 @@ def parse_testng(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_t
     return summary
 
 
+def parse_playwright_summary(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
+    """Reminder UI (Playwright), read from the test-reports/<run>/report.txt its
+    Google Chat reporter writes at the end of every run: "Total N · Pass N ·
+    Fail N · Skip N", one "<icon> <section> (passed/total)" line per page and a
+    "*Failures*" list of "• <section> → <step>: <reason>" lines."""
+    path = newest_match(cwd, cfg["glob"], started_ts)
+    if path is None:
+        return _empty("ERROR", "Run ended before writing its summary - npm/browser setup or config error? (see log)")
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return _empty("ERROR", f"Unreadable summary: {exc}")
+
+    counts = re.search(r"Total (\d+) · Pass (\d+) · Fail (\d+)", text)
+    sections = [{"title": title.strip(), "passed": int(passed), "total": int(total)}
+                for title, passed, total in re.findall(r"^\S+ (.+?) \((\d+)/(\d+)\)\s*$", text, re.M)]
+    failures = []
+    for line in text.partition("*Failures*")[2].splitlines():
+        line = line.strip()
+        if not line.startswith("•"):
+            continue
+        where, sep, reason = line[1:].strip().partition(": ")
+        section, arrow, name = where.partition(" → ")
+        if sep and arrow:
+            failures.append({"section": section, "name": name, "reason": reason})
+        else:  # an error outside any step (login, timeout, ...)
+            failures.append({"section": "", "name": "Run", "reason": line[1:].strip()})
+
+    passed = int(counts.group(2)) if counts else sum(s["passed"] for s in sections)
+    total = int(counts.group(1)) if counts else sum(s["total"] for s in sections)
+    # Skipped steps (after a failed step on the same page) count as not passed.
+    status = "FAIL" if failures else _status_from_counts(passed, total, exit_code)
+    summary = _empty(status)
+    summary.update(passed=passed, total=total, sections=sections, failures=failures)
+    return summary
+
+
 def parse_exit_code(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
     return _empty("PASS" if exit_code == 0 else "FAIL",
                   None if exit_code == 0 else f"Exited with code {exit_code} (see log and report)")
@@ -168,6 +205,7 @@ PARSERS = {
     "reminder_sanity": parse_reminder_sanity,
     "recall_results": parse_recall_results,
     "testng": parse_testng,
+    "playwright_summary": parse_playwright_summary,
     "exit_code": parse_exit_code,
 }
 

@@ -99,6 +99,7 @@ def detect_java_home() -> str | None:
 
 
 MAVEN_CMD = detect_maven()
+NPX_CMD = setting("NPX_CMD") or shutil.which("npx")
 JAVA_HOME = detect_java_home()
 
 
@@ -130,11 +131,13 @@ def setup_problems(job: dict) -> list[str]:
             problems.append(f"Missing {required} in {cwd.name}")
     if "{mvn}" in job["command"] and not MAVEN_CMD:
         problems.append("Maven not found - set MAVEN_CMD in the dashboard .env")
+    if "{npx}" in job["command"] and not NPX_CMD:
+        problems.append("Node.js (npx) not found - install Node.js or set NPX_CMD in the dashboard .env")
     return problems
 
 
 def build_command(job: dict) -> list[str]:
-    tokens = {"{python}": sys.executable, "{mvn}": MAVEN_CMD or "mvn"}
+    tokens = {"{python}": sys.executable, "{mvn}": MAVEN_CMD or "mvn", "{npx}": NPX_CMD or "npx"}
     return [tokens.get(part, part) for part in job["command"]]
 
 
@@ -577,11 +580,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(HTTPStatus.NOT_FOUND)
         cwd = job_cwd(job)
         target = (cwd / unquote(rel)).resolve()
-        # Only files inside the project that match one of its report globs.
+        # Only files inside the project that match one of its report globs
+        # (or a report's "assets" glob - the screenshots/videos it embeds).
         if not target.is_file() or not target.is_relative_to(cwd):
             return self.send_error(HTTPStatus.NOT_FOUND)
         rel_posix = target.relative_to(cwd).as_posix()
-        if not any(fnmatch.fnmatch(rel_posix, spec["glob"]) for spec in job.get("reports", [])):
+        if not any(fnmatch.fnmatch(rel_posix, pattern) for spec in job.get("reports", [])
+                   for pattern in (spec["glob"], spec.get("assets")) if pattern):
             return self.send_error(HTTPStatus.NOT_FOUND)
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         headers = {}
