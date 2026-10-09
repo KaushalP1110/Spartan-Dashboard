@@ -10,8 +10,6 @@ the failures that need attention, and links to every report - all in one place.
 | Recall Status | `python runners/run_recall_status_check.py` | `recall_status_results_*.json` (+ HTML/PDF) |
 | Spartan API | `mvn -B test` | `target/surefire-reports/testng-results.xml` (+ comparison report) |
 | Cron Reporting | `mvn -B test` | `testng-results.xml` (+ Excel export) |
-| Reminder Template Setter | `python -m reminder_setter` (folder `../Reminder-Template-Setter`) | exit code (+ HTML report) |
-| Reminder UI | Jenkins job `Reminder-UI-Automation` | Jenkins build result and test report |
 
 Each local automation runs **in its own project folder exactly as if you ran
 it by hand**, so Jenkins/CLI runs and dashboard runs behave the same.
@@ -33,11 +31,10 @@ prefix (the dashboard uses absolute paths such as `/api` and `/files`).
    <folder>/Reminder-Sanity-Automation
    <folder>/Recall-Status-Automation
    <folder>/CronReporting            (repo root; the Maven project is CronReporting/CronReporting)
-   <folder>/Reminder-Template-Setter
    ```
    Each project needs its own `.env` there, as when you run it by hand.
 2. In `Spartan-Dashboard`, copy `.env.example` to `.env` and fill in Google
-   sign-in (below) and Jenkins.
+   sign-in (below).
 3. Check `OPENDENTAL_DB_HOST` in `spartan/docker-compose.yml` (the PC
    running OpenDental's MySQL - see below), then from the `spartan` folder:
    ```
@@ -113,9 +110,8 @@ Sessions last 12 hours and are cleared when the dashboard restarts.
 
 ## How it behaves
 
-- **One run per automation at a time.** Reminder Sanity and the Template
-  Setter both repoint the location-wide reminder templates, so they share a
-  lock: while one runs, the other's Run button is disabled.
+- **One run per automation at a time.** Jobs that must never overlap can
+  share a `lock` in `jobs.json`.
 - The Spartan card links to the existing Spartan UI (via the QA portal,
   `http://172.16.1.89:8102`) for editing its `.env`.
   Don't start tests there while the dashboard runs Spartan - both use the
@@ -127,8 +123,6 @@ Sessions last 12 hours and are cleared when the dashboard restarts.
   that dies before producing results shows **ERROR** with the reason.
 - History records who started each run. It is kept in `data/` (gitignored)
   together with every run's full log.
-- The Jenkins card also shows the latest Jenkins build, including builds
-  started by Jenkins itself.
 - If the dashboard is restarted mid-run, that run is marked **interrupted**.
 
 ## Adding or changing an automation

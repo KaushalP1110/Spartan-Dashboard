@@ -80,6 +80,7 @@
   .section-title h2 { margin: 0; font-size: 1rem; }
   .section-title span { color: var(--muted); font-size: .82rem; }
   .jobs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .jobs[data-count="2"], .jobs[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }  /* no lone card on the last row */
   .job { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column;
          position: relative; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
   .job::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--idle-bar); }
@@ -217,7 +218,7 @@
   @media (max-width: 700px) {
     .nav-in, .page { padding-left: 16px; padding-right: 16px; }
     .brand span, .live span, .user .name { display: none; }
-    .jobs { grid-template-columns: 1fr; }
+    .jobs, .jobs[data-count] { grid-template-columns: 1fr; }
     .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi { padding: 12px; gap: 10px; } .kpi-ic { display: none; }
     .dr-stats { grid-template-columns: 1fr 1fr; }
@@ -425,6 +426,7 @@ function historyHtml(job) {
     <span>${runs.length ? `${passes} of last ${runs.length} passed` : "No history yet"}</span></div>`;
 }
 function renderJobs() {
+  $("jobs").dataset.count = state.jobs.length;
   $("jobs").innerHTML = state.jobs.map(job => {
     const st = cardStatus(job);
     const run = job.last_run;
