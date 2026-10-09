@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spartan Dashboard</title>
+<style>
+  :root {
+    --bg: #f3f5f9; --surface: #ffffff; --surface-2: #f8f9fc; --text: #101828; --text-2: #475467; --muted: #667085;
+    --border: #e4e7ec; --border-2: #d0d5dd;
+    --nav: #0f172a; --nav-text: #e2e8f0; --gold: #d4a017;
+    --accent: #3448d6; --accent-hover: #2a3bb8; --accent-soft: #eef0ff;
+    --pass: #067647; --pass-bg: #ecfdf3; --pass-bar: #17b26a;
+    --fail: #b42318; --fail-bg: #fef3f2; --fail-bar: #f04438;
+    --run: #b54708; --run-bg: #fffaeb; --run-bar: #f79009;
+    --idle: #475467; --idle-bg: #f2f4f7; --idle-bar: #d0d5dd;
+    --py: #2563eb; --py-bg: #eff4ff; --mvn: #c4320a; --mvn-bg: #fff4ed; --ci: #7a2e0e; --ci-bg: #fef6ee;
+    --log-bg: #0b1220; --log-text: #cbd5e1;
+    --shadow: 0 1px 2px rgba(16,24,40,.05); --shadow-lg: 0 24px 48px -12px rgba(16,24,40,.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f17; --surface: #131a26; --surface-2: #182132; --text: #f2f4f7; --text-2: #cbd2dc; --muted: #94a0b4;
+      --border: #243045; --border-2: #33415a; --nav: #070b12;
+      --accent: #6b7cff; --accent-hover: #8291ff; --accent-soft: #1d2442;
+      --pass: #47cd89; --pass-bg: #0f2a1d; --pass-bar: #17b26a;
+      --fail: #f97066; --fail-bg: #3a1513; --fail-bar: #f04438;
+      --run: #fdb022; --run-bg: #33240a; --run-bar: #f79009;
+      --idle: #a3adbf; --idle-bg: #1f2838; --idle-bar: #3a4760;
+      --py: #84adff; --py-bg: #172446; --mvn: #ff9c66; --mvn-bg: #3a1d10; --ci: #f7b27a; --ci-bg: #33200f;
+      --log-bg: #05080e; --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 24px 48px -12px rgba(0,0,0,.6);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         -webkit-font-smoothing: antialiased; }
+  body.drawer-open { overflow: hidden; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button { font: inherit; cursor: pointer; }
+  svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  [hidden] { display: none !important; }
+
+  /* --- top bar --- */
+  .nav { background: var(--nav); color: var(--nav-text); position: sticky; top: 0; z-index: 20; }
+  .nav-in { max-width: 1320px; margin: 0 auto; height: 60px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 11px; color: #fff; }
+  .brand b { font-size: 1.05rem; letter-spacing: .01em; }
+  .brand span { font-size: .78rem; color: #94a3b8; border-left: 1px solid #334155; padding-left: 11px; margin-left: 1px; }
+  .nav-right { display: flex; align-items: center; gap: 14px; font-size: .85rem; }
+  .live { display: inline-flex; align-items: center; gap: 7px; color: #94a3b8; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: #17b26a; box-shadow: 0 0 0 3px rgba(23,178,106,.25); }
+  .live.off i { background: #f04438; box-shadow: 0 0 0 3px rgba(240,68,56,.25); }
+  .user { display: flex; align-items: center; gap: 9px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: #334155; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: .75rem; }
+  .signout { background: transparent; border: 1px solid #334155; color: var(--nav-text); border-radius: 8px; padding: 5px 11px; font-size: .8rem; }
+  .signout:hover { border-color: #64748b; }
+
+  .page { max-width: 1320px; margin: 0 auto; padding: 28px 24px 64px; }
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .page-head h1 { margin: 0; font-size: 1.5rem; letter-spacing: -.01em; }
+  .page-head p { margin: 4px 0 0; color: var(--muted); }
+
+  /* --- KPI tiles --- */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); display: flex; gap: 14px; align-items: flex-start; }
+  .kpi-ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .kpi-ic svg.i { width: 20px; height: 20px; }
+  .kpi-ic.blue { background: var(--accent-soft); color: var(--accent); }
+  .kpi-ic.amber { background: var(--run-bg); color: var(--run); }
+  .kpi-ic.green { background: var(--pass-bg); color: var(--pass); }
+  .kpi-ic.red { background: var(--fail-bg); color: var(--fail); }
+  .kpi-label { color: var(--muted); font-size: .8rem; font-weight: 500; }
+  .kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi-sub { color: var(--muted); font-size: .78rem; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* --- automation cards --- */
+  .section-title { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+  .section-title h2 { margin: 0; font-size: 1rem; }
+  .section-title span { color: var(--muted); font-size: .82rem; }
+  .jobs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .job { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+         position: relative; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+  .job::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--idle-bar); }
+  .job.st-pass::before { background: var(--pass-bar); } .job.st-fail::before, .job.st-error::before { background: var(--fail-bar); }
+  .job.st-running::before { background: var(--run-bar); }
+  .job:hover { border-color: var(--border-2); box-shadow: 0 6px 16px -8px rgba(16,24,40,.18); }
+  .job-body { padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  .job-head { display: flex; gap: 12px; align-items: flex-start; }
+  .kind-ic { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: .72rem; letter-spacing: .02em; flex: none; }
+  .kind-ic.Python { background: var(--py-bg); color: var(--py); }
+  .kind-ic.Maven { background: var(--mvn-bg); color: var(--mvn); }
+  .kind-ic.Jenkins { background: var(--ci-bg); color: var(--ci); }
+  .job-title { flex: 1; min-width: 0; }
+  .job-name { font-weight: 650; font-size: 1rem; line-height: 1.3; }
+  .job-meta { color: var(--muted); font-size: .78rem; }
+  .desc { color: var(--text-2); font-size: .84rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.52rem; margin: 0; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: .74rem; white-space: nowrap; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .chip.pass { background: var(--pass-bg); color: var(--pass); }
+  .chip.fail, .chip.error { background: var(--fail-bg); color: var(--fail); }
+  .chip.running { background: var(--run-bg); color: var(--run); }
+  .chip.running::before { animation: pulse 1.2s ease-in-out infinite; }
+  .chip.stopped, .chip.interrupted, .chip.never, .chip.setup { background: var(--idle-bg); color: var(--idle); }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  .stats { display: grid; grid-template-columns: 1.3fr 1fr 1fr; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+  .stat { padding: 9px 12px; min-width: 0; }
+  .stat + .stat { border-left: 1px solid var(--border); }
+  .stat-label { color: var(--muted); font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .stat-value { font-weight: 650; font-size: .95rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat-value.pass { color: var(--pass); } .stat-value.fail { color: var(--fail); }
+  .mini-bar { height: 4px; border-radius: 99px; background: var(--fail-bar); margin-top: 5px; overflow: hidden; opacity: .9; }
+  .mini-bar span { display: block; height: 100%; background: var(--pass-bar); }
+  .mini-bar.none { background: var(--idle-bar); }
+
+  .running-box { border: 1px solid var(--run-bar); background: var(--run-bg); border-radius: 10px; padding: 10px 12px; }
+  .running-top { display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; }
+  .running-top b { color: var(--run); }
+  .running-top span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .progress { height: 6px; border-radius: 99px; background: rgba(247,144,9,.18); overflow: hidden; margin-top: 8px; }
+  .progress span { display: block; height: 100%; background: var(--run-bar); border-radius: 99px; transition: width .6s; }
+
+  .history { display: flex; align-items: center; gap: 10px; font-size: .74rem; color: var(--muted); }
+  .bars { display: flex; gap: 3px; align-items: flex-end; height: 18px; }
+  .bars i { width: 8px; height: 18px; border-radius: 3px; background: var(--idle-bar); }
+  .bars i.pass { background: var(--pass-bar); } .bars i.fail, .bars i.error { background: var(--fail-bar); }
+  .bars i.stopped, .bars i.interrupted { background: var(--idle-bar); }
+  .bars i.none { background: transparent; border: 1px dashed var(--border-2); }
+
+  .alert { display: flex; gap: 8px; align-items: flex-start; border-radius: 9px; padding: 8px 11px; font-size: .8rem; line-height: 1.45; }
+  .alert svg.i { margin-top: 2px; width: 14px; height: 14px; }
+  .alert.setup { background: var(--run-bg); color: var(--run); }
+  .alert.error { background: var(--fail-bg); color: var(--fail); }
+  .note { display: flex; gap: 7px; align-items: flex-start; color: var(--muted); font-size: .76rem; line-height: 1.45; margin-top: auto; }
+  .note svg.i { width: 13px; height: 13px; margin-top: 2px; }
+
+  .job-foot { border-top: 1px solid var(--border); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .link { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; font-weight: 600; color: var(--text-2); padding: 4px 9px; border-radius: 7px;
+          border: 1px solid var(--border); background: var(--surface); white-space: nowrap; }
+  .link svg.i { width: 13px; height: 13px; }
+  .link:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+  .actions { display: flex; gap: 8px; flex: none; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 14px; font-weight: 600; font-size: .85rem; border: 1px solid transparent; white-space: nowrap; }
+  .btn svg.i { width: 14px; height: 14px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-primary svg.i { fill: currentColor; stroke: none; }
+  .btn-ghost { background: var(--surface); color: var(--text-2); border-color: var(--border-2); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: var(--surface); color: var(--fail); border-color: var(--fail); }
+  .btn-danger:hover { background: var(--fail-bg); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* --- activity table --- */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .panel-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .panel-head h2 { margin: 0; font-size: 1rem; }
+  .panel-head span { color: var(--muted); font-size: .82rem; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 11px 20px; border-bottom: 1px solid var(--border); font-size: .85rem; vertical-align: middle; white-space: nowrap; }
+  th { background: var(--surface-2); color: var(--muted); font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.num { font-variant-numeric: tabular-nums; }
+  .job-cell { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); }
+  .job-cell .kind-ic { width: 26px; height: 26px; border-radius: 7px; font-size: .6rem; }
+  .row-links { display: flex; gap: 12px; }
+  .empty-row { color: var(--muted); padding: 22px 20px; text-align: center; }
+
+  /* --- detail drawer --- */
+  .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100%); background: var(--bg); z-index: 50; box-shadow: var(--shadow-lg);
+            transform: translateX(100%); transition: transform .25s ease; display: flex; flex-direction: column; }
+  .drawer.show { transform: none; }
+  .dr-head { background: var(--surface); border-bottom: 1px solid var(--border); padding: 18px 22px; display: flex; gap: 14px; align-items: flex-start; }
+  .dr-head .job-title h3 { margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .dr-close { background: transparent; border: 0; color: var(--muted); padding: 6px; border-radius: 8px; }
+  .dr-close:hover { background: var(--idle-bg); color: var(--text); }
+  .dr-close svg.i { width: 20px; height: 20px; }
+  .dr-body { overflow-y: auto; padding: 18px 22px 40px; display: flex; flex-direction: column; gap: 16px; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .box h4 { margin: 0 0 12px; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .box h4 label { text-transform: none; letter-spacing: 0; font-weight: 500; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .dr-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .dr-stats .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; }
+  .dr-stats .stat + .stat { border-left: 1px solid var(--border); }
+  .dr-stats .stat-value { font-size: 1.15rem; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .step { border-top: 3px solid var(--idle-bar); padding-top: 7px; font-size: .78rem; color: var(--muted); }
+  .step.done { border-color: var(--pass-bar); color: var(--text-2); } .step.active { border-color: var(--run-bar); color: var(--text); font-weight: 650; }
+  .bar-row { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr 56px; gap: 12px; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar { height: 8px; border-radius: 99px; background: var(--fail-bar); overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--pass-bar); }
+  .bar-row .count { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .fail-item { border: 1px solid var(--border); border-left: 3px solid var(--fail-bar); border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: .84rem; }
+  .fail-item:last-child { margin-bottom: 0; }
+  .fail-item .why { color: var(--muted); font-size: .8rem; margin-top: 2px; word-break: break-word; }
+  .all-clear { display: flex; align-items: center; gap: 8px; color: var(--pass); font-weight: 600; }
+  pre.log { margin: 0; background: var(--log-bg); color: var(--log-text); border-radius: 9px; padding: 12px 14px; height: 320px; overflow: auto;
+            font: 12px/1.55 "Cascadia Mono", Consolas, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+  .box table th, .box table td { padding: 9px 10px; }
+  .box .table-wrap { margin: 0 -18px -16px; }
+  .box .table-wrap th:first-child, .box .table-wrap td:first-child { padding-left: 18px; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 12px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px;
+           font-weight: 600; font-size: .88rem; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 60; max-width: calc(100% - 32px); box-shadow: var(--shadow-lg); }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 1100px) { .jobs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 700px) {
+    .nav-in, .page { padding-left: 16px; padding-right: 16px; }
+    .brand span, .live span, .user .name { display: none; }
+    .jobs { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .kpi { padding: 12px; gap: 10px; } .kpi-ic { display: none; }
+    .dr-stats { grid-template-columns: 1fr 1fr; }
+    .bar-row { grid-template-columns: 1fr 50px; } .bar-row .bar { grid-column: 1 / -1; grid-row: 2; }
+    .dr-head, .dr-body { padding-left: 16px; padding-right: 16px; }
+    th, td { padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-pie" viewBox="0 0 24 24"><path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></symbol>
+</svg>
+
+<nav class="nav"><div class="nav-in">
+  <div class="brand">
+    <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path fill="#d4a017" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path fill="#0f172a" d="M12 5.2 7 7.1v3.9c0 3.4 2.1 6.4 5 7.6V5.2Z" opacity=".35"/></svg>
+    <b>Spartan Dashboard</b><span>QA automation hub</span>
+  </div>
+  <div class="nav-right">
+    <span class="live" id="live"><i></i><span id="liveText">Live</span></span>
+    <div class="user" id="user" hidden><div class="avatar" id="avatar"></div><span class="name" id="userName"></span>
+      <button class="signout" id="logout">Sign out</button></div>
+  </div>
+</div></nav>
+
+<main class="page">
+  <div class="page-head">
+    <div><h1>Automations</h1><p>Run any suite with one click. Results, failures and reports update live.</p></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="jobs" id="jobs"></div>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Recent activity</h2><span id="recentCount"></span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Automation</th><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th></tr></thead>
+      <tbody id="recent"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="dTitle">
+  <div class="dr-head">
+    <div class="kind-ic" id="dKind"></div>
+    <div class="job-title"><h3 id="dTitle"></h3><div class="job-meta" id="dMeta"></div></div>
+    <div class="actions" id="dActions"></div>
+    <button class="dr-close" id="dClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dr-body">
+    <div class="alert setup" id="dProblems" hidden></div>
+    <div class="dr-stats" id="dStats"></div>
+    <div class="box" id="dStepsBox" hidden><h4>Progress</h4><div class="steps" id="dSteps"></div></div>
+    <div class="box" id="dLinksBox"><h4>Reports</h4><div class="links" id="dLinks"></div></div>
+    <div class="box"><h4>Results by group</h4><div id="dSections"></div></div>
+    <div class="box"><h4 id="dFailTitle">Needs attention</h4><div id="dFailures"></div></div>
+    <div class="box"><h4><span id="dLogTitle">Log</span><label><input type="checkbox" id="autoScroll" checked> Follow</label></h4><pre class="log" id="dLog"></pre></div>
+    <div class="box"><h4>Run history</h4><div class="table-wrap"><table>
+      <thead><tr><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th></tr></thead>
+      <tbody id="dHistory"></tbody></table></div></div>
+  </div>
+</aside>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const icon = (name, cls = "i") => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
+const KIND_LABEL = {Python: "Py", Maven: "Mvn", Jenkins: "CI"};
+const STATUS_LABEL = {pass: "Passed", fail: "Failed", error: "Error", running: "Running", stopped: "Stopped", interrupted: "Interrupted", never: "Not run yet", setup: "Setup needed"};
+
+let state = null;
+let openJob = new URLSearchParams(location.search).get("job");
+
+// --- formatting
+function fmtTime(iso) {
+  return iso ? new Date(iso).toLocaleString([], {day: "numeric", month: "short", hour: "numeric", minute: "2-digit"}) : "-";
+}
+function ago(iso) {
+  if (!iso) return "-";
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return "just now"; if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60); if (h < 24) return `${h} h ago`;
+  const d = Math.round(h / 24); return d === 1 ? "yesterday" : `${d} days ago`;
+}
+function dur(start, end) {
+  if (!start) return "-";
+  const s = Math.max(0, Math.round(((end ? new Date(end) : new Date()) - new Date(start)) / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? `${h}h ${m}m` : m ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`;
+}
+function initials(name) {
+  return String(name || "?").split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3500);
+}
+const chip = (cls, label) => `<span class="chip ${cls}">${esc(label || STATUS_LABEL[cls] || cls)}</span>`;
+const kindIc = (kind) => `<div class="kind-ic ${esc(kind)}">${esc(KIND_LABEL[kind] || (kind || "?").slice(0, 3))}</div>`;
+
+function cardStatus(job) {
+  if (job.running) return "running";
+  if (job.problems.length) return "setup";
+  return job.last_run ? job.last_run.status : "never";
+}
+function linkIcon(label, url) {
+  if (/log/i.test(label)) return "term";
+  if (/^https?:/.test(url)) return "ext";
+  return "file";
+}
+function linksHtml(reports, run, extra) {
+  const items = [...(reports || [])];
+  if (run && run.summary && run.summary.drive_url) items.push({label: "Google Drive", url: run.summary.drive_url});
+  if (run) items.push({label: "Log", url: `/api/log/${run.id}`});
+  (extra || []).forEach(l => items.push(l));
+  return items.map(l => `<a class="link" href="${esc(l.url)}" target="_blank" rel="noopener">${icon(linkIcon(l.label, l.url))}${esc(l.label)}</a>`).join("");
+}
+function counts(run) {
+  const s = run && run.summary;
+  return s && s.total != null ? {passed: s.passed, total: s.total} : null;
+}
+function lockBlocker(job) {
+  return job.lock ? state.jobs.find(o => o.id !== job.id && o.lock === job.lock && o.running) : null;
+}
+function runButton(job, small) {
+  if (job.running) return `<button class="btn btn-danger" data-stop="${job.id}">${icon("stop")}Stop</button>`;
+  const blocker = lockBlocker(job);
+  const why = job.problems.length ? "Finish setup first" : blocker ? `Wait for ${blocker.name} - both change the same reminder templates` : "";
+  return `<button class="btn btn-primary" data-run="${job.id}" ${why ? "disabled" : ""} title="${esc(why)}">${icon("play")}Run</button>`;
+}
+
+// --- KPI tiles
+function renderKpis() {
+  const jobs = state.jobs;
+  const ready = jobs.filter(j => !j.problems.length).length;
+  const running = jobs.filter(j => j.running);
+  const withResult = jobs.filter(j => j.last_run);
+  const passing = withResult.filter(j => j.last_run.status === "pass").length;
+  const failing = withResult.filter(j => ["fail", "error"].includes(j.last_run.status));
+  const weekAgo = Date.now() - 7 * 864e5;
+  const week = state.recent.filter(r => r.status !== "running" && new Date(r.started_at) >= weekAgo);
+  const weekPass = week.filter(r => r.status === "pass").length;
+  const rate = week.length ? Math.round(weekPass * 100 / week.length) : null;
+  $("kpis").innerHTML = `
+    <div class="kpi"><div class="kpi-ic blue">${icon("grid")}</div><div><div class="kpi-label">Ready to run</div>
+      <div class="kpi-value">${ready}<span style="font-size:1rem;color:var(--muted);font-weight:600"> / ${jobs.length}</span></div>
+      <div class="kpi-sub">${jobs.length - ready ? `${jobs.length - ready} need setup` : "All set up"}</div></div></div>
+    <div class="kpi"><div class="kpi-ic amber">${icon("activity")}</div><div style="min-width:0"><div class="kpi-label">Running now</div>
+      <div class="kpi-value">${running.length}</div>
+      <div class="kpi-sub" title="${esc(running.map(j => j.name).join(", "))}">${running.length ? esc(running.map(j => j.name).join(", ")) : "Nothing running"}</div></div></div>
+    <div class="kpi"><div class="kpi-ic ${failing.length ? "red" : "green"}">${icon(failing.length ? "alert" : "check")}</div><div style="min-width:0"><div class="kpi-label">Latest results</div>
+      <div class="kpi-value"><span style="color:var(--pass)">${passing}</span><span style="font-size:1rem;color:var(--muted);font-weight:600"> passing · </span><span style="color:${failing.length ? "var(--fail)" : "inherit"}">${failing.length}</span><span style="font-size:1rem;color:var(--muted);font-weight:600"> failing</span></div>
+      <div class="kpi-sub" title="${esc(failing.map(j => j.name).join(", "))}">${failing.length ? esc(failing.map(j => j.name).join(", ")) : withResult.length ? "No failures" : "No runs yet"}</div></div></div>
+    <div class="kpi"><div class="kpi-ic blue">${icon("pie")}</div><div><div class="kpi-label">Pass rate · 7 days</div>
+      <div class="kpi-value">${rate == null ? "-" : rate + "%"}</div>
+      <div class="kpi-sub">${week.length ? `${weekPass} of ${week.length} runs passed` : "No runs this week"}</div></div></div>`;
+}
+
+// --- automation cards
+function statsHtml(job) {
+  const run = job.last_run, c = counts(run);
+  let result = `<div class="stat-value">-</div><div class="mini-bar none"></div>`;
+  if (c) {
+    const pct = c.total ? c.passed * 100 / c.total : 0;
+    result = `<div class="stat-value ${c.passed === c.total ? "pass" : "fail"}">${c.passed}/${c.total} passed</div><div class="mini-bar"><span style="width:${pct}%"></span></div>`;
+  } else if (run) {
+    result = `<div class="stat-value ${run.status === "pass" ? "pass" : "fail"}">${esc(STATUS_LABEL[run.status] || run.status)}</div><div class="mini-bar ${run.status === "pass" ? "" : ""}"><span style="width:${run.status === "pass" ? 100 : 0}%"></span></div>`;
+  }
+  return `<div class="stats">
+    <div class="stat"><div class="stat-label">Last result</div>${result}</div>
+    <div class="stat"><div class="stat-label">Last run</div><div class="stat-value" title="${esc(run ? fmtTime(run.started_at) + " by " + run.started_by : "")}">${run ? ago(run.finished_at || run.started_at) : "-"}</div></div>
+    <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">${run ? dur(run.started_at, run.finished_at) : job.est_minutes ? "~" + job.est_minutes + " min" : "-"}</div></div>
+  </div>`;
+}
+function runningHtml(job) {
+  const r = job.running;
+  const elapsedMin = (Date.now() - new Date(r.started_at)) / 60000;
+  const pct = job.est_minutes ? Math.min(96, Math.max(3, elapsedMin * 100 / job.est_minutes)) : 50;
+  const step = r.step != null && job.steps.length ? `Step ${r.step + 1}/${job.steps.length} · ${job.steps[r.step]}` : "In progress";
+  return `<div class="running-box"><div class="running-top"><b>${esc(step)}</b><span>${dur(r.started_at)}</span></div>
+    <div class="progress" title="Estimate based on ~${job.est_minutes} min"><span style="width:${pct}%"></span></div>
+    <div class="job-meta" style="margin-top:6px">Started by ${esc(r.started_by)} · usually ~${job.est_minutes} min</div></div>`;
+}
+function historyHtml(job) {
+  const runs = job.pass_streak.slice(0, 10).reverse();
+  const pad = Array(Math.max(0, 10 - runs.length)).fill("none");
+  const passes = runs.filter(s => s === "pass").length;
+  return `<div class="history"><div class="bars" title="Last ${runs.length} runs, oldest → newest">${[...pad, ...runs].map(s => `<i class="${s}"></i>`).join("")}</div>
+    <span>${runs.length ? `${passes} of last ${runs.length} passed` : "No history yet"}</span></div>`;
+}
+function renderJobs() {
+  $("jobs").innerHTML = state.jobs.map(job => {
+    const st = cardStatus(job);
+    const run = job.last_run;
+    const reports = run && run.reports && run.reports.length ? run.reports : job.latest_reports;
+    const links = linksHtml(reports, run, job.links);
+    let alerts = job.problems.map(p => `<div class="alert setup">${icon("alert")}<span>${esc(p)}</span></div>`).join("");
+    if (!job.running && run && run.status === "error" && run.summary && run.summary.error) {
+      alerts += `<div class="alert error">${icon("alert")}<span>${esc(run.summary.error)}</span></div>`;
+    }
+    let jenkins = "";
+    if (job.jenkins_last) {
+      const jl = job.jenkins_last;
+      jenkins = `<div class="job-meta">Latest Jenkins build <a href="${esc(jl.url)}" target="_blank" rel="noopener">#${jl.number}</a> · ${esc(jl.building ? "building" : (jl.result || "-").toLowerCase())} · ${ago(new Date(jl.timestamp).toISOString())}</div>`;
+    }
+    return `<article class="job st-${st}">
+      <div class="job-body">
+        <div class="job-head">${kindIc(job.kind)}
+          <div class="job-title"><div class="job-name">${esc(job.name)}</div><div class="job-meta">${esc(job.kind)}${job.est_minutes ? ` · ~${job.est_minutes} min` : ""}</div></div>
+          ${chip(st)}</div>
+        <p class="desc" title="${esc(job.description)}">${esc(job.description)}</p>
+        ${job.running ? runningHtml(job) : statsHtml(job)}
+        ${historyHtml(job)}
+        ${jenkins}${alerts}
+        ${links ? `<div class="links">${links}</div>` : ""}
+        ${job.warning ? `<div class="note">${icon("info")}<span>${esc(job.warning)}</span></div>` : ""}
+      </div>
+      <div class="job-foot">
+        <div class="job-meta">${job.running ? `Running · started by ${esc(job.running.started_by)}` : run ? `Last run by ${esc(run.started_by)}` : "Never run from the dashboard"}</div>
+        <div class="actions"><button class="btn btn-ghost" data-open="${job.id}" title="Details, log and history">${icon("panel")}Details</button>${runButton(job)}</div>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+// --- tables
+function historyRows(runs, withJob) {
+  return runs.map(r => {
+    const c = counts(r);
+    const job = state.jobs.find(j => j.id === r.job_id) || {kind: ""};
+    return `<tr>
+      ${withJob ? `<td><a href="#" class="job-cell" data-open="${r.job_id}">${kindIc(job.kind)}${esc(r.job_name)}</a></td>` : ""}
+      <td>${chip(r.status)}</td>
+      <td class="num">${c ? `${c.passed}/${c.total}` : "-"}</td>
+      <td title="${esc(new Date(r.started_at).toLocaleString())}">${fmtTime(r.started_at)}</td>
+      <td class="num">${dur(r.started_at, r.finished_at)}</td>
+      <td>${esc(r.started_by || "-")}</td>
+      <td><div class="row-links">${[...(r.reports || []), ...(r.summary && r.summary.drive_url ? [{label: "Drive", url: r.summary.drive_url}] : []), {label: "Log", url: `/api/log/${r.id}`}]
+          .map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")}</div></td></tr>`;
+  }).join("");
+}
+
+// --- drawer
+function renderDrawer() {
+  const sel = state.selected;
+  const job = openJob && state.jobs.find(j => j.id === openJob);
+  const show = !!(job && sel && sel.job_id === openJob);
+  $("drawer").classList.toggle("show", show);
+  $("scrim").classList.toggle("show", show);
+  $("drawer").setAttribute("aria-hidden", String(!show));
+  document.body.classList.toggle("drawer-open", show);
+  if (!show) return;
+
+  const run = sel.run, st = cardStatus(job), s = run && run.summary, c = counts(run);
+  $("dKind").className = `kind-ic ${job.kind}`; $("dKind").textContent = KIND_LABEL[job.kind] || job.kind;
+  $("dTitle").innerHTML = `${esc(job.name)} ${chip(st)}`;
+  $("dMeta").textContent = job.description;
+  $("dActions").innerHTML = runButton(job);
+  $("dProblems").hidden = !job.problems.length;
+  $("dProblems").innerHTML = icon("alert") + `<span>${job.problems.map(esc).join("<br>")}</span>`;
+
+  $("dStats").innerHTML = `
+    <div class="stat"><div class="stat-label">Result</div><div class="stat-value ${run ? (run.status === "pass" ? "pass" : run.status === "running" ? "" : "fail") : ""}">${run ? esc(STATUS_LABEL[run.status] || run.status) : "-"}</div></div>
+    <div class="stat"><div class="stat-label">Passed</div><div class="stat-value">${c ? `${c.passed}/${c.total}` : "-"}</div></div>
+    <div class="stat"><div class="stat-label">${run && run.status === "running" ? "Elapsed" : "Duration"}</div><div class="stat-value">${run ? dur(run.started_at, run.finished_at) : "-"}</div></div>
+    <div class="stat"><div class="stat-label">Run by</div><div class="stat-value" title="${esc(run ? fmtTime(run.started_at) : "")}">${run ? esc(run.started_by) : "-"}</div></div>`;
+
+  const steps = job.running && job.steps.length ? job.steps : [];
+  $("dStepsBox").hidden = !steps.length;
+  $("dSteps").innerHTML = steps.map((name, i) => {
+    const at = job.running.step;
+    return `<div class="step ${i < at ? "done" : i === at ? "active" : ""}">${i + 1}. ${esc(name)}</div>`;
+  }).join("");
+
+  const links = linksHtml(run ? run.reports : job.latest_reports, run, job.links);
+  $("dLinksBox").hidden = !links;
+  $("dLinks").innerHTML = links;
+
+  if (!s) {
+    $("dSections").innerHTML = `<div class="job-meta">${job.running ? "Results appear when the run finishes." : "No results yet."}</div>`;
+    $("dFailures").innerHTML = `<div class="job-meta">-</div>`;
+    $("dFailTitle").textContent = "Needs attention";
+  } else {
+    $("dSections").innerHTML = s.sections.length ? s.sections.map(sec => {
+      const pct = sec.total ? sec.passed * 100 / sec.total : 0;
+      return `<div class="bar-row"><div>${esc(sec.title)}</div><div class="bar"><span style="width:${pct}%"></span></div><div class="count">${sec.passed}/${sec.total}</div></div>`;
+    }).join("") : `<div class="job-meta">${esc(s.error || "This automation only reports pass/fail - open its report for details.")}</div>`;
+    $("dFailTitle").textContent = s.failures.length ? `Needs attention · ${s.failures.length}` : "Needs attention";
+    $("dFailures").innerHTML = s.failures.length
+      ? s.failures.map(f => `<div class="fail-item"><b>${esc(f.section)}</b>${f.section && f.name ? " · " : ""}${esc(f.name)}<div class="why">${esc(f.reason || "No reason recorded")}</div></div>`).join("")
+      : s.overall_status === "PASS" ? `<div class="all-clear">${icon("check")}Nothing to fix - every check passed.</div>`
+      : `<div class="job-meta">${esc(s.error || "See the log and report.")}</div>`;
+  }
+
+  $("dLogTitle").textContent = job.running ? "Live log" : "Log · latest run";
+  const pre = $("dLog");
+  const text = sel.log.length ? sel.log.join("\n") : "(no log yet)";
+  if (pre.textContent !== text) {
+    pre.textContent = text;
+    if ($("autoScroll").checked) pre.scrollTop = pre.scrollHeight;
+  }
+  $("dHistory").innerHTML = sel.history.length ? historyRows(sel.history, false) : `<tr><td colspan="6" class="empty-row">No runs yet.</td></tr>`;
+}
+
+function render() {
+  const local = state.user === "local";
+  $("user").hidden = local;
+  $("avatar").textContent = initials(state.user);
+  $("userName").textContent = state.user;
+  $("live").classList.remove("off"); $("liveText").textContent = "Live";
+  renderKpis();
+  renderJobs();
+  renderDrawer();
+  $("recentCount").textContent = state.recent.length ? `Last ${state.recent.length} runs` : "";
+  $("recent").innerHTML = state.recent.length ? historyRows(state.recent, true)
+    : `<tr><td colspan="7" class="empty-row">No runs yet - pick an automation above and click Run.</td></tr>`;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/api/status" + (openJob ? `?job=${encodeURIComponent(openJob)}` : ""), {cache: "no-store"});
+    if (res.status === 401) { location.href = "/login"; return; }
+    state = await res.json();
+    render();
+  } catch (e) {
+    $("live").classList.add("off"); $("liveText").textContent = "Offline";
+  }
+}
+
+function setOpen(jobId) {
+  openJob = jobId;
+  const url = new URL(location.href);
+  if (jobId) url.searchParams.set("job", jobId); else url.searchParams.delete("job");
+  history.replaceState(null, "", url);
+  if (!jobId) { renderDrawer(); return; }
+  refresh();
+}
+
+async function action(jobId, verb) {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/${verb}`, {method: "POST"});
+  if (res.status === 401) { location.href = "/login"; return; }
+  const body = await res.json().catch(() => ({}));
+  const name = (state.jobs.find(j => j.id === jobId) || {}).name || jobId;
+  toast(res.ok ? (verb === "run" ? `${name} started` : `Stopping ${name}…`) : (body.message || "Something went wrong"));
+  refresh();
+}
+
+document.addEventListener("click", (ev) => {
+  const run = ev.target.closest("[data-run]"), stop = ev.target.closest("[data-stop]"), open = ev.target.closest("[data-open]");
+  if (run) action(run.dataset.run, "run");
+  else if (stop) {
+    if (confirm("Stop this run now?\n\nAnything it already set up (appointments, recalls) will NOT be cleaned up.")) action(stop.dataset.stop, "stop");
+  } else if (open) { ev.preventDefault(); setOpen(open.dataset.open); }
+});
+$("dClose").addEventListener("click", () => setOpen(null));
+$("scrim").addEventListener("click", () => setOpen(null));
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && openJob) setOpen(null); });
+$("logout").addEventListener("click", async () => { await fetch("/api/logout", {method: "POST"}); location.href = "/login"; });
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spartan Dashboard</title>
+<style>
+  :root { --bg: #eef1f6; --card: #fff; --text: #141b2b; --muted: #667085; --border: #dfe4ee; --soft: #f6f8fb;
+          --accent: #3346d3; --accent-hover: #2636b5; --fail: #c0261e; --fail-bg: #fde9e8; --head: #121a2e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0c111b; --card: #151c2a; --text: #e6eaf2; --muted: #96a0b5; --border: #263045; --soft: #1a2233;
+            --accent: #6377ff; --accent-hover: #7d8eff; --fail: #ff6b61; --fail-bg: #3a1716; --head: #0a0f19; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--text);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .box { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+         box-shadow: 0 20px 40px -24px rgba(0,0,0,.35); }
+  .head { background: var(--head); color: #fff; padding: 26px 26px 22px; display: flex; gap: 14px; align-items: center; }
+  .head h1 { margin: 0; font-size: 1.25rem; }
+  .head p { margin: 2px 0 0; opacity: .75; font-size: .85rem; }
+  .body { padding: 24px 26px 26px; display: grid; gap: 14px; }
+  .hint { margin: 0; color: var(--muted); font-size: .88rem; }
+  label { font-size: .8rem; font-weight: 600; color: var(--muted); display: grid; gap: 6px; }
+  input { font: inherit; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button, .gbtn { font: inherit; font-weight: 600; padding: 11px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer;
+                  text-decoration: none; text-align: center; }
+  button:hover, .gbtn:hover { background: var(--accent-hover); }
+  button:disabled { opacity: .5; cursor: default; }
+  .google { display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .google:hover { background: var(--soft); }
+  .code { font: 700 1.9rem/1.2 Consolas, "Cascadia Mono", Menlo, monospace; letter-spacing: .12em; text-align: center; padding: 14px;
+          background: var(--soft); border: 1px dashed var(--border); border-radius: 12px; user-select: all; }
+  .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: .88rem; display: grid; gap: 4px; }
+  .steps b { color: var(--text); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .err { margin: 0; color: var(--fail); background: var(--fail-bg); border-radius: 8px; padding: 8px 10px; font-size: .85rem; }
+  .err:empty { display: none; }
+  .wait { color: var(--muted); font-size: .82rem; text-align: center; margin: 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="head">
+    <svg width="38" height="38" viewBox="0 0 24 24" aria-hidden="true"><path fill="#d69e2e" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path fill="#121a2e" d="M12 5.2 7 7.1v3.9c0 3.4 2.1 6.4 5 7.6V5.2Z" opacity=".35"/></svg>
+    <div><h1>Spartan Dashboard</h1><p>QA automation hub</p></div>
+  </div>
+  <div class="body">
+    <p class="err" id="err"></p>
+
+    <!-- Google: redirect flow -->
+    <div id="googleWeb" hidden style="display:grid;gap:14px">
+      <p class="hint" id="webHint"></p>
+      <a class="gbtn google" href="/auth/google"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Sign in with Google</a>
+    </div>
+
+    <!-- Google: device flow (works on a plain http:// LAN address) -->
+    <div id="googleDevice" hidden style="display:grid;gap:14px">
+      <div id="devStart" style="display:grid;gap:14px">
+        <p class="hint" id="devHint"></p>
+        <button class="google" id="devBtn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Sign in with Google</button>
+      </div>
+      <div id="devCode" hidden style="display:grid;gap:14px">
+        <ol class="steps">
+          <li>Click <b>Open Google</b> (opens a new tab)</li>
+          <li>Enter this code and choose your <b id="devDomain"></b> account</li>
+          <li>Come back here - you'll be signed in automatically</li>
+        </ol>
+        <div class="code" id="userCode"></div>
+        <div class="row">
+          <a class="gbtn" id="openGoogle" target="_blank" rel="noopener">Open Google</a>
+          <button class="google" id="copyBtn" type="button">Copy code</button>
+        </div>
+        <p class="wait" id="devWait">Waiting for you to approve…</p>
+      </div>
+    </div>
+
+    <!-- Shared password (fallback when Google isn't configured) -->
+    <form id="pwForm" hidden style="display:grid;gap:14px">
+      <label>Your name <input id="name" autocomplete="name" maxlength="40" placeholder="Shown in run history"></label>
+      <label>Team password <input id="password" type="password" autocomplete="current-password"></label>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const showError = (msg) => { $("err").textContent = msg || ""; };
+const params = new URLSearchParams(location.search);
+if (params.get("error")) showError(params.get("error"));
+
+async function init() {
+  const cfg = await fetch("/api/auth/config").then(r => r.json()).catch(() => ({mode: "password"}));
+  const domains = (cfg.domains || []).map(d => "@" + d).join(" / ");
+  if (cfg.mode === "none") { location.href = "/"; return; }
+  if (cfg.mode === "google-web") {
+    $("googleWeb").hidden = false;
+    $("webHint").textContent = `Use your ${domains} Google account.`;
+  } else if (cfg.mode === "google-device") {
+    $("googleDevice").hidden = false;
+    $("devHint").textContent = `Use your ${domains} Google account.`;
+    $("devDomain").textContent = domains;
+  } else {
+    $("pwForm").hidden = false;
+    try { $("name").value = localStorage.getItem("spartan_name") || ""; } catch (e) {}
+    ($("name").value ? $("password") : $("name")).focus();
+  }
+}
+
+// --- device flow
+let pollTimer = null;
+$("devBtn").addEventListener("click", async () => {
+  showError("");
+  $("devBtn").disabled = true;
+  const res = await fetch("/api/auth/device/start", {method: "POST"});
+  const data = await res.json().catch(() => ({}));
+  $("devBtn").disabled = false;
+  if (!res.ok) { showError(data.message || "Could not start Google sign-in"); return; }
+  $("userCode").textContent = data.user_code;
+  $("openGoogle").href = data.verification_url;
+  $("devStart").hidden = true;
+  $("devCode").hidden = false;
+  poll(data.flow, Math.max(3, data.interval) * 1000);
+});
+function poll(flow, every) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    const res = await fetch("/api/auth/device/poll", {method: "POST", headers: {"Content-Type": "application/json"},
+                                                     body: JSON.stringify({flow})}).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {status: "pending"};
+    if (data.status === "ok") { location.href = "/"; return; }
+    if (data.status === "pending") { poll(flow, every); return; }
+    showError(data.message || "Sign-in failed");
+    $("devCode").hidden = true;
+    $("devStart").hidden = false;
+  }, every);
+}
+$("copyBtn").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("userCode").textContent); $("copyBtn").textContent = "Copied"; }
+  catch (e) { $("copyBtn").textContent = "Select & copy"; }
+  setTimeout(() => { $("copyBtn").textContent = "Copy code"; }, 1500);
+});
+
+// --- password fallback
+$("pwForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = $("name").value.trim();
+  const res = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name, password: $("password").value})});
+  const body = await res.json().catch(() => ({}));
+  if (res.ok) {
+    try { localStorage.setItem("spartan_name", name); } catch (e) {}
+    location.href = "/";
+  } else showError(body.message || "Sign-in failed");
+});
+
+init();
+</script>
+</body>
+</html>

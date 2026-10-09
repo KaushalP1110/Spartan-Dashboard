@@ -1,0 +1,115 @@
+{
+  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md.",
+  "jobs": [
+    {
+      "id": "reminder_sanity",
+      "name": "Reminder Sanity",
+      "description": "Books test appointments in OpenDental, triggers Adit's reminder cron and validates every reminder type end to end.",
+      "kind": "Python",
+      "type": "local",
+      "cwd": "../Reminder-Sanity-Automation",
+      "command": ["{python}", "-u", "runners/run_all_reminders_sanity.py"],
+      "requires": [".env"],
+      "result": {"type": "summary_json", "env": "REMINDER_SANITY_SUMMARY_PATH"},
+      "reports": [
+        {"label": "HTML report", "glob": "reports/output/reminder_sanity_multi_report_*.html"},
+        {"label": "PDF", "glob": "reports/output/reminder_sanity_multi_report_*.pdf"}
+      ],
+      "steps": [
+        ["Booking in OpenDental", null],
+        ["Waiting for Adit sync", "for Adit to sync"],
+        ["Configuring templates", "Phase 2 starting"],
+        ["Cron wait & validation", "Waiting for Cron time"],
+        ["Publishing report", "HTML report written"]
+      ],
+      "lock": "adit-reminder-templates",
+      "warning": "Books real appointments, repoints location-wide reminder templates and sends a real SMS.",
+      "est_minutes": 45
+    },
+    {
+      "id": "recall_status",
+      "name": "Recall Status",
+      "description": "Sets up 5 recall scenarios in OpenDental and checks Adit's Automated Recall report shows the right status for each.",
+      "kind": "Python",
+      "type": "local",
+      "cwd": "../Recall-Status-Automation",
+      "command": ["{python}", "-u", "runners/run_recall_status_check.py"],
+      "requires": [".env"],
+      "result": {"type": "recall_results", "glob": "reports/output/recall_status_results_*.json"},
+      "reports": [
+        {"label": "HTML report", "glob": "reports/output/recall_status_report_*.html"},
+        {"label": "PDF", "glob": "reports/output/recall_status_report_*.pdf"}
+      ],
+      "warning": "Writes recalls and appointments to OpenDental (cleaned up at the end).",
+      "est_minutes": 15
+    },
+    {
+      "id": "spartan",
+      "name": "Spartan API",
+      "description": "AI Recare Outreach suite: Broken Appointments, Recall Appointments and Unscheduled Treatment API comparisons.",
+      "kind": "Maven",
+      "type": "local",
+      "cwd": "../spartan",
+      "command": ["{mvn}", "-B", "test"],
+      "requires": [".env"],
+      "result": {"type": "testng", "path": "target/surefire-reports/testng-results.xml"},
+      "links": [
+        {"label": "Configure (Spartan UI)", "url": "http://172.16.1.89:8090"}
+      ],
+      "warning": "Edit settings in the Spartan UI; don't start tests there at the same time.",
+      "reports": [
+        {"label": "Comparison report", "glob": "target/adit-comparison-report.html"},
+        {"label": "TestNG report", "glob": "target/surefire-reports/emailable-report.html"}
+      ],
+      "est_minutes": 10
+    },
+    {
+      "id": "cron_reporting",
+      "name": "Cron Reporting",
+      "description": "Collects failed cron jobs and SMS/email counts, exports them to Excel and posts the summary to Google Chat.",
+      "kind": "Maven",
+      "type": "local",
+      "cwd": "../CronReporting/CronReporting",
+      "command": ["{mvn}", "-B", "test"],
+      "requires": [],
+      "result": {"type": "testng", "path": "target/surefire-reports/testng-results.xml"},
+      "reports": [
+        {"label": "Excel export", "glob": "CronJobData_*.xlsx"},
+        {"label": "TestNG report", "glob": "target/surefire-reports/emailable-report.html"}
+      ],
+      "est_minutes": 5
+    },
+    {
+      "id": "template_setter",
+      "name": "Reminder Template Setter",
+      "description": "Points Birthday, Appointment and Recall reminder templates at the next :00/:30 cron slot.",
+      "kind": "Python",
+      "type": "local",
+      "cwd": "../Reminder-Template-Setter",
+      "command": ["{python}", "-u", "-m", "reminder_setter"],
+      "env": {"PYTHONPATH": "src"},
+      "env_file": ".env",
+      "requires": [".env"],
+      "result": {"type": "exit_code"},
+      "reports": [
+        {"label": "HTML report", "glob": "reports/report_*.html"}
+      ],
+      "lock": "adit-reminder-templates",
+      "warning": "Changes location-wide reminder template times.",
+      "est_minutes": 1
+    },
+    {
+      "id": "reminder_ui",
+      "name": "Reminder UI (Jenkins)",
+      "description": "Selenium suite for Engage, Auto-Reminders, Birthday, Recall, Appointment and Dashboard flows - runs on Jenkins.",
+      "kind": "Jenkins",
+      "type": "jenkins",
+      "jenkins_job": "Reminder-UI-Automation",
+      "jenkins_params": null,
+      "jenkins_links": [
+        {"label": "Extent report", "path": "Extent_20Report/"}
+      ],
+      "est_minutes": 30
+    }
+  ]
+}
