@@ -21,17 +21,4 @@ for req in /workspace/*/requirements.txt; do
     || echo "[spartan] WARNING: could not install $req"
 done
 
-# Node projects (Reminder UI - Playwright): packages when missing, then the
-# Chromium build that project's Playwright version expects (quick once present).
-for pkg in /workspace/*/package-lock.json; do
-  [ -f "$pkg" ] || continue
-  dir=$(dirname "$pkg")
-  [ -d "$dir/node_modules" ] || { echo "[spartan] npm ci: $dir"; (cd "$dir" && npm ci --no-audit --no-fund) \
-    || echo "[spartan] WARNING: npm ci failed in $dir"; }
-  if [ -f "$dir/node_modules/@playwright/test/package.json" ]; then
-    echo "[spartan] Playwright browser for $dir"
-    (cd "$dir" && npx playwright install chromium) || echo "[spartan] WARNING: playwright install failed in $dir"
-  fi
-done
-
 exec /venv/bin/python server.py --host 0.0.0.0 --port 8765

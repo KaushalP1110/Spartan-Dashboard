@@ -99,7 +99,6 @@ def detect_java_home() -> str | None:
 
 
 MAVEN_CMD = detect_maven()
-NPX_CMD = setting("NPX_CMD") or shutil.which("npx")
 JAVA_HOME = detect_java_home()
 
 
@@ -131,13 +130,11 @@ def setup_problems(job: dict) -> list[str]:
             problems.append(f"Missing {required} in {cwd.name}")
     if "{mvn}" in job["command"] and not MAVEN_CMD:
         problems.append("Maven not found - set MAVEN_CMD in the dashboard .env")
-    if "{npx}" in job["command"] and not NPX_CMD:
-        problems.append("Node.js (npx) not found - install Node.js or set NPX_CMD in the dashboard .env")
     return problems
 
 
 def build_command(job: dict) -> list[str]:
-    tokens = {"{python}": sys.executable, "{mvn}": MAVEN_CMD or "mvn", "{npx}": NPX_CMD or "npx"}
+    tokens = {"{python}": sys.executable, "{mvn}": MAVEN_CMD or "mvn"}
     return [tokens.get(part, part) for part in job["command"]]
 
 
@@ -260,6 +257,29 @@ def _watch_local(job: dict, run_id: str, process: subprocess.Popen, log_file, st
             reports=run_reports(job, started_ts))
 
 
+def _jenkins_artifacts(job: dict, build_url: str, info: dict, summary: dict) -> tuple[dict, list[dict]]:
+    """Links to the build's archived reports ("jenkins_artifacts" in jobs.json;
+    the newest match when the build archived several runs' folders), and the
+    summary from an artifact that has a "result" parser instead of Jenkins'
+    test report."""
+    archived = jenkins.artifacts(build_url)
+    links = []
+    for spec in job.get("jenkins_artifacts", []):
+        matches = sorted(p for p in archived if fnmatch.fnmatch(p, spec["glob"]))
+        if not matches:
+            continue
+        links.append({"label": spec["label"], "url": jenkins.artifact_url(build_url, matches[-1])})
+        if spec.get("result") and info.get("result") != "ABORTED":
+            try:
+                text = jenkins.artifact_text(build_url, matches[-1])
+            except jenkins.JenkinsError:
+                continue
+            parsed = parsers.parse_text(spec["result"], text, 0 if info.get("result") == "SUCCESS" else 1)
+            if parsed:
+                summary = parsed
+    return summary, links
+
+
 def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
     log = log_path(run_id)
     build_url = None
@@ -286,9 +306,12 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
                 break
             time.sleep(10)
         summary = jenkins.summarize(info, jenkins.test_report(build_url))
-        links = [{"label": f"Jenkins build #{info.get('number')}", "url": build_url},
-                 {"label": "Test results", "url": build_url + "testReport/"}]
+        links = [{"label": f"Jenkins build #{info.get('number')}", "url": build_url}]
+        if not job.get("jenkins_artifacts"):
+            links.append({"label": "Test results", "url": build_url + "testReport/"})
         links += [{"label": link["label"], "url": build_url + link["path"]} for link in job.get("jenkins_links", [])]
+        summary, artifact_links = _jenkins_artifacts(job, build_url, info, summary)
+        links += artifact_links
         status = "stopped" if info.get("result") == "ABORTED" else summary["overall_status"].lower()
         _finish(job, run_id, status=status, summary=summary, reports=links, jenkins_build_url=build_url)
     except jenkins.JenkinsError as exc:
@@ -580,13 +603,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(HTTPStatus.NOT_FOUND)
         cwd = job_cwd(job)
         target = (cwd / unquote(rel)).resolve()
-        # Only files inside the project that match one of its report globs
-        # (or a report's "assets" glob - the screenshots/videos it embeds).
+        # Only files inside the project that match one of its report globs.
         if not target.is_file() or not target.is_relative_to(cwd):
             return self.send_error(HTTPStatus.NOT_FOUND)
         rel_posix = target.relative_to(cwd).as_posix()
-        if not any(fnmatch.fnmatch(rel_posix, pattern) for spec in job.get("reports", [])
-                   for pattern in (spec["glob"], spec.get("assets")) if pattern):
+        if not any(fnmatch.fnmatch(rel_posix, spec["glob"]) for spec in job.get("reports", [])):
             return self.send_error(HTTPStatus.NOT_FOUND)
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         headers = {}

@@ -10,7 +10,7 @@ the failures that need attention, and links to every report - all in one place.
 | Recall Status | `python runners/run_recall_status_check.py` | `recall_status_results_*.json` (+ HTML/PDF) |
 | Spartan API | `mvn -B test` | `target/surefire-reports/testng-results.xml` (+ comparison report) |
 | Cron Reporting | `mvn -B test` | `testng-results.xml` (+ Excel export) |
-| Reminder UI | `npx playwright test` | `test-reports/<run>/report.txt` (+ Playwright HTML report) |
+| Reminder UI | Jenkins job `Reminder UI Automation Playwright` | the build's archived `test-reports/<run>/report.txt` (+ Playwright HTML report) |
 
 Each local automation runs **in its own project folder exactly as if you ran
 it by hand**, so Jenkins/CLI runs and dashboard runs behave the same.
@@ -32,14 +32,10 @@ prefix (the dashboard uses absolute paths such as `/api` and `/files`).
    <folder>/Reminder-Sanity-Automation
    <folder>/Recall-Status-Automation
    <folder>/CronReporting            (repo root; the Maven project is CronReporting/CronReporting)
-   <folder>/Reminder-UI-Automation-PW
    ```
    Each project needs its own `.env` there, as when you run it by hand.
-   Reminder UI instead needs `test-data/credentials.js` and
-   `reporting.config.mjs` (copy the `.example` files); its npm packages and
-   Playwright browser are installed when the container starts.
 2. In `Spartan-Dashboard`, copy `.env.example` to `.env` and fill in Google
-   sign-in (below).
+   sign-in (below) and Jenkins (for Reminder UI).
 3. Check `OPENDENTAL_DB_HOST` in `spartan/docker-compose.yml` (the PC
    running OpenDental's MySQL - see below), then from the `spartan` folder:
    ```
@@ -49,7 +45,7 @@ prefix (the dashboard uses absolute paths such as `/api` and `/files`).
    First start takes a few minutes (image build + Python packages). Logs:
    `docker logs -f spartan-dashboard`.
 
-The image contains Python 3.12, JDK 21 + Maven, Node.js 22 (Playwright) and Chromium (PDF export), so
+The image contains Python 3.12, JDK 21 + Maven and Chromium (PDF export), so
 every automation runs inside it. Projects are mounted live, so a `git pull`
 on the host is picked up on the next run; reports and run history are
 written to the host folders.
@@ -107,8 +103,6 @@ Sessions last 12 hours and are cleared when the dashboard restarts.
 ### Requirements (without Docker)
 
 - Python 3.10+ with each Python project's `requirements.txt` installed.
-- Node.js for Reminder UI (`npm ci` and `npx playwright install chromium` in
-  its folder once).
 - Maven + JDK 21 for the Maven projects - auto-detected (PATH, then IntelliJ's
   bundled Maven and `~/.jdks`), or set `MAVEN_CMD` / `JAVA_HOME` in `.env`.
 - Each project's own `.env`, and the same network access they need anyway
@@ -130,6 +124,8 @@ Sessions last 12 hours and are cleared when the dashboard restarts.
   that dies before producing results shows **ERROR** with the reason.
 - History records who started each run. It is kept in `data/` (gitignored)
   together with every run's full log.
+- The Reminder UI card also shows the latest Jenkins build, including the
+  daily 12:00 builds Jenkins starts itself.
 - If the dashboard is restarted mid-run, that run is marked **interrupted**.
 
 ## Adding or changing an automation
@@ -149,15 +145,15 @@ Edit `jobs.json` and restart. A local job:
 }
 ```
 
-Result types: `reminder_sanity`, `recall_results`, `testng`, `playwright_summary`, `exit_code`.
-`{npx}` in a command is Node's npx. A report's optional `"assets"` glob lets
-the files it embeds (screenshots, videos) be opened too.
+Result types: `reminder_sanity`, `recall_results`, `testng`, `exit_code`.
 No automation is changed for the dashboard - each is read from its normal output. Only files matching a job's `reports`
 globs can be opened from the dashboard.
 
 A Jenkins job: `"type": "jenkins"`, `"jenkins_job": "Folder/Job"`, optional
 `"jenkins_params": {...}` (uses buildWithParameters) and `"jenkins_links"`
 (paths relative to the build URL, e.g. an HTML Publisher report).
+`"jenkins_artifacts"` links the newest archived file matching each `glob`; one
+with `"result": "playwright_summary"` also gives the run's result.
 
 ## Files
 

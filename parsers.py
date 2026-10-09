@@ -159,19 +159,11 @@ def parse_testng(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_t
     return summary
 
 
-def parse_playwright_summary(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
-    """Reminder UI (Playwright), read from the test-reports/<run>/report.txt its
-    Google Chat reporter writes at the end of every run: "Total N · Pass N ·
-    Fail N · Skip N", one "<icon> <section> (passed/total)" line per page and a
-    "*Failures*" list of "• <section> → <step>: <reason>" lines."""
-    path = newest_match(cwd, cfg["glob"], started_ts)
-    if path is None:
-        return _empty("ERROR", "Run ended before writing its summary - npm/browser setup or config error? (see log)")
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        return _empty("ERROR", f"Unreadable summary: {exc}")
-
+def playwright_summary(text: str, exit_code: int) -> dict:
+    """Reminder UI (Playwright): the test-reports/<run>/report.txt its Google
+    Chat reporter writes at the end of every run (Jenkins archives it):
+    "Total N · Pass N · Fail N · Skip N", one "<icon> <section> (passed/total)"
+    line per page and a "*Failures*" list of "• <section> → <step>: <reason>"."""
     counts = re.search(r"Total (\d+) · Pass (\d+) · Fail (\d+)", text)
     sections = [{"title": title.strip(), "passed": int(passed), "total": int(total)}
                 for title, passed, total in re.findall(r"^\S+ (.+?) \((\d+)/(\d+)\)\s*$", text, re.M)]
@@ -205,9 +197,24 @@ PARSERS = {
     "reminder_sanity": parse_reminder_sanity,
     "recall_results": parse_recall_results,
     "testng": parse_testng,
-    "playwright_summary": parse_playwright_summary,
     "exit_code": parse_exit_code,
 }
+
+
+# Parsers for a result file's text (e.g. a Jenkins build artifact).
+TEXT_PARSERS = {
+    "playwright_summary": playwright_summary,
+}
+
+
+def parse_text(kind: str, text: str, exit_code: int) -> Optional[dict]:
+    parser = TEXT_PARSERS.get(kind)
+    if parser is None:
+        return None
+    try:
+        return parser(text, exit_code)
+    except Exception as exc:  # noqa: BLE001 - a parser bug must not lose the run
+        return _empty("ERROR", f"Could not read results: {exc}")
 
 
 def parse(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:

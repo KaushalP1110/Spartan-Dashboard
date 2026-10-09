@@ -101,6 +101,24 @@ def test_report(build_url: str) -> Optional[dict]:
         return None
 
 
+def artifacts(build_url: str) -> list[str]:
+    """Relative paths of the files the build archived."""
+    try:
+        info = _json(build_url + "api/json?tree=artifacts[relativePath]")
+    except JenkinsError:
+        return []
+    return [a["relativePath"] for a in info.get("artifacts", []) if a.get("relativePath")]
+
+
+def artifact_url(build_url: str, relative_path: str) -> str:
+    return build_url + "artifact/" + urllib.parse.quote(relative_path)
+
+
+def artifact_text(build_url: str, relative_path: str) -> str:
+    with _request(artifact_url(build_url, relative_path)) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
 def stop(build_url: str) -> None:
     with _request(build_url + "stop", method="POST", data=b""):
         pass
