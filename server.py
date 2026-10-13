@@ -286,6 +286,12 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
     try:
         with log.open("w", encoding="utf-8") as fh:
             fh.write(f"Triggering Jenkins job {job['jenkins_job']}...\n")
+        # A disabled job makes Jenkins answer the build POST with a bare HTTP
+        # 409 - say what's actually wrong instead.
+        if jenkins._json(jenkins.job_url(job["jenkins_job"]) + "api/json?tree=buildable").get("buildable") is False:
+            raise jenkins.JenkinsError(
+                f"The Jenkins job \"{job['jenkins_job']}\" is disabled. Enable it in Jenkins "
+                f"({jenkins.job_url(job['jenkins_job'])}), then press Run again.")
         queue_url = jenkins.trigger(job["jenkins_job"], job.get("jenkins_params"))
         with log.open("a", encoding="utf-8") as fh:
             fh.write(f"Queued: {queue_url}\nWaiting for an executor...\n")
@@ -315,9 +321,16 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
         status = "stopped" if info.get("result") == "ABORTED" else summary["overall_status"].lower()
         _finish(job, run_id, status=status, summary=summary, reports=links, jenkins_build_url=build_url)
     except jenkins.JenkinsError as exc:
+        message = str(exc)
+        if "not reachable" in message:
+            message = (f"Jenkins at {jenkins._base()} is offline or not accepting connections - "
+                       f"check that the Jenkins machine is on, then press Run again. ({exc})")
+        elif "HTTP 409" in message:
+            message = (f"Jenkins refused to start \"{job['jenkins_job']}\" (HTTP 409) - the job is usually "
+                       f"disabled. Enable it in Jenkins, then press Run again.")
         with log.open("a", encoding="utf-8") as fh:
-            fh.write(f"\n[dashboard] {exc}\n")
-        _finish(job, run_id, status="error", summary=parsers._empty("ERROR", str(exc)),
+            fh.write(f"\n[dashboard] {message}\n")
+        _finish(job, run_id, status="error", summary=parsers._empty("ERROR", message),
                 reports=[{"label": "Jenkins build", "url": build_url}] if build_url else [])
 
 
