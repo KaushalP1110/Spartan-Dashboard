@@ -34,6 +34,14 @@ def _base() -> str:
     return CONFIG["JENKINS_URL"].rstrip("/") + "/"
 
 
+def _rebase(url: str) -> str:
+    """Point a URL Jenkins returned at JENKINS_URL's scheme/host/port. Jenkins
+    builds the URLs in its API (build, queue, job) from its own "Jenkins URL"
+    setting, which is often http://localhost:8080 - unreachable from here."""
+    ours, theirs = urllib.parse.urlsplit(_base()), urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit(theirs._replace(scheme=ours.scheme, netloc=ours.netloc))
+
+
 def job_url(job: str) -> str:
     # "Folder/Job" -> job/Folder/job/Job/
     return _base() + "".join(f"job/{urllib.parse.quote(part)}/" for part in job.split("/"))
@@ -65,7 +73,7 @@ def trigger(job: str, params: Optional[dict] = None) -> str:
         location = resp.headers.get("Location")
     if not location:
         raise JenkinsError("Jenkins accepted the build but returned no queue location")
-    return location.rstrip("/") + "/"
+    return _rebase(location.rstrip("/") + "/")
 
 
 def wait_for_build(queue_url: str, should_stop, poll_seconds: int = 5, timeout_seconds: int = 3600) -> Optional[str]:
@@ -78,13 +86,16 @@ def wait_for_build(queue_url: str, should_stop, poll_seconds: int = 5, timeout_s
             return None
         executable = item.get("executable")
         if executable and executable.get("url"):
-            return executable["url"]
+            return _rebase(executable["url"])
         time.sleep(poll_seconds)
     return None
 
 
 def build_info(build_url: str) -> dict:
-    return _json(build_url + "api/json?tree=number,building,result,url,timestamp,duration")
+    info = _json(build_url + "api/json?tree=number,building,result,url,timestamp,duration")
+    if info.get("url"):
+        info["url"] = _rebase(info["url"])
+    return info
 
 
 def console_text(build_url: str) -> str:
@@ -126,9 +137,12 @@ def stop(build_url: str) -> None:
 
 def last_build(job: str) -> Optional[dict]:
     try:
-        return _json(job_url(job) + "lastBuild/api/json?tree=number,building,result,url,timestamp,duration")
+        info = _json(job_url(job) + "lastBuild/api/json?tree=number,building,result,url,timestamp,duration")
     except JenkinsError:
         return None
+    if info.get("url"):
+        info["url"] = _rebase(info["url"])
+    return info
 
 
 def summarize(build: dict, report: Optional[dict]) -> dict:
