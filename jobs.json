@@ -169,8 +169,8 @@
           "result": "playwright_summary"
         },
         {
-          "label": "HTML report",
-          "glob": "test-reports/*/playwright-report/index.html"
+          "label": "PDF report",
+          "glob": "test-reports/*/report.pdf"
         }
       ],
       "warning": "Creates and deletes reminder templates on real locations and posts the summary to Google Chat.",
