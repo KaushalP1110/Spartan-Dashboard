@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spartan Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23d4a017%27 d=%27M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z%27/%3E%3Cpath fill=%27%230f172a%27 opacity=%27.35%27 d=%27M12 5.2 7 7.1v3.9c0 3.4 2.1 6.4 5 7.6V5.2Z%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  try { const t = localStorage.getItem("spartan_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
   :root {
     --bg: #f3f5f9; --surface: #ffffff; --surface-2: #f8f9fc; --text: #101828; --text-2: #475467; --muted: #667085;
@@ -31,9 +38,23 @@
       --log-bg: #05080e; --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 24px 48px -12px rgba(0,0,0,.6);
     }
   }
+  :root[data-theme="dark"] {
+      --bg: #0b0f17; --surface: #131a26; --surface-2: #182132; --text: #f2f4f7; --text-2: #cbd2dc; --muted: #94a0b4;
+      --border: #243045; --border-2: #33415a; --nav: #070b12;
+      --accent: #6b7cff; --accent-hover: #8291ff; --accent-soft: #1d2442;
+      --pass: #47cd89; --pass-bg: #0f2a1d; --pass-bar: #17b26a;
+      --fail: #f97066; --fail-bg: #3a1513; --fail-bar: #f04438;
+      --run: #fdb022; --run-bg: #33240a; --run-bar: #f79009;
+      --idle: #a3adbf; --idle-bg: #1f2838; --idle-bar: #3a4760;
+      --py: #84adff; --py-bg: #172446; --mvn: #ff9c66; --mvn-bg: #3a1d10; --ci: #f7b27a; --ci-bg: #33200f; --pw: #75e0a7; --pw-bg: #0f2a1d;
+      --log-bg: #05080e; --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-lg: 0 24px 48px -12px rgba(0,0,0,.6);
+    }
+  :root { color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+  :root[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 Lexend, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
          -webkit-font-smoothing: antialiased; }
   body.drawer-open { overflow: hidden; }
   a { color: var(--accent); text-decoration: none; }
@@ -56,6 +77,10 @@
   .avatar { width: 30px; height: 30px; border-radius: 50%; background: #334155; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: .75rem; }
   .signout { background: transparent; border: 1px solid #334155; color: var(--nav-text); border-radius: 8px; padding: 5px 11px; font-size: .8rem; }
   .signout:hover { border-color: #64748b; }
+  .theme-btn { display: inline-flex; align-items: center; gap: 7px; background: transparent; border: 1px solid #334155; color: var(--nav-text);
+               border-radius: 8px; padding: 5px 10px; font-size: .8rem; }
+  .theme-btn:hover { border-color: #64748b; background: rgba(255,255,255,.06); }
+  .theme-btn svg.i { width: 15px; height: 15px; }
 
   .page { max-width: 1320px; margin: 0 auto; padding: 28px 24px 64px; }
   .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -231,7 +256,7 @@
   @media (max-width: 1100px) { .jobs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 700px) {
     .nav-in, .page { padding-left: 16px; padding-right: 16px; }
-    .brand span, .live span, .user .name { display: none; }
+    .brand span, .live span, .user .name, .theme-label { display: none; }
     .jobs, .jobs[data-count] { grid-template-columns: 1fr; }
     .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi { padding: 12px; gap: 10px; } .kpi-ic { display: none; }
@@ -255,6 +280,8 @@
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
   <symbol id="i-ext" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></symbol>
   <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></symbol>
 </svg>
@@ -266,6 +293,7 @@
   </div>
   <div class="nav-right">
     <span class="live" id="live"><i></i><span id="liveText">Live</span></span>
+    <button class="theme-btn" id="themeBtn" type="button"><svg class="i"><use href="#i-moon"/></svg><span class="theme-label">Night</span></button>
     <div class="user" id="user" hidden><div class="avatar" id="avatar"></div><span class="name" id="userName"></span>
       <button class="signout" id="logout">Sign out</button></div>
   </div>
@@ -631,6 +659,27 @@ $("dClose").addEventListener("click", () => setOpen(null));
 $("scrim").addEventListener("click", () => setOpen(null));
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && openJob) setOpen(null); });
 $("logout").addEventListener("click", async () => { await fetch("/api/logout", {method: "POST"}); location.href = "/login"; });
+
+// --- Day / Night theme: follows the OS until the user picks one (remembered per browser).
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+const currentTheme = () => document.documentElement.dataset.theme || (darkQuery.matches ? "dark" : "light");
+function paintThemeButton() {
+  const btn = document.getElementById("themeBtn");
+  if (!btn) return;
+  const dark = currentTheme() === "dark";
+  btn.querySelector("use").setAttribute("href", dark ? "#i-sun" : "#i-moon");
+  btn.querySelector(".theme-label").textContent = dark ? "Day" : "Night";
+  btn.title = dark ? "Switch to day mode" : "Switch to night mode";
+  btn.setAttribute("aria-label", btn.title);
+}
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("spartan_theme", next); } catch (e) {}
+  paintThemeButton();
+});
+darkQuery.addEventListener("change", paintThemeButton);
+paintThemeButton();
 
 refresh();
 setInterval(refresh, 3000);
