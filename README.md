@@ -6,7 +6,7 @@ the failures that need attention, and links to every report - all in one place.
 
 | Automation | Runs | Result shown from |
 |---|---|---|
-| Reminder Sanity | `python runners/run_all_reminders_sanity.py` | its HTML report + console summary (+ HTML/PDF/Drive links) |
+| Reminder Sanity | `python runners/run_all_reminders_sanity.py` | its console summary in the run log (+ HTML/PDF links, or its Google Drive folder once the run moved the report there) |
 | Recall Status | `python runners/run_recall_status_check.py` | `recall_status_results_*.json` (+ HTML/PDF) |
 | Spartan API | `mvn -B test` | `target/surefire-reports/testng-results.xml` (+ comparison report) |
 | Cron Reporting | `mvn -B test` | `testng-results.xml` (+ Excel export) |

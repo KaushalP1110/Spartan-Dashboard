@@ -49,33 +49,69 @@ def _text(fragment: str) -> str:
     return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", fragment)).split())
 
 
-def parse_reminder_sanity(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
-    """Reminder Sanity, read from what a normal run already produces (the
-    project itself is not changed for the dashboard):
+_RS_RULE = "-" * 60
+_RS_ENTRY = re.compile(r"^(?P<name>.+?) \(PatNum=(?P<pat>\d+)\)(?: \[(?P<scenario>.*)\])?$")
 
-    - per-section counts: the stat tiles at the top of its HTML report
-      (same counting as the report and the Chat card)
-    - failures: the report's FAIL rows (tables) and FAIL row cards
-    - overall: the "Overall: PASS|FAIL" line of its console report (the log)
-    - Drive link: the file id it logs after uploading the PDF
-    """
-    log = ""
-    try:
-        log = log_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        pass
-    report = newest_match(cwd, cfg["glob"], started_ts)
-    if report is None:
-        failed = re.findall(r"Reminder Sanity run failed: (.+)", log)
-        return _empty("ERROR", failed[-1].strip() if failed else "Run ended before writing its report (see log)")
-    try:
-        page = report.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        return _empty("ERROR", f"Unreadable report: {exc}")
 
+def _reminder_sanity_console(log: str) -> Optional[tuple[list, list]]:
+    """(sections, failures) from the console summary Reminder Sanity prints at
+    the end of every run ("REMINDER SANITY REPORT (combined)" ... "Overall:"),
+    or None if the log has none. Counted like its HTML report / Chat card
+    (report_builder._effective_display / section_counts): PASS, FAMILY and
+    SKIP count as passed, and a ScheduleConfirmation FAIL counts as passed
+    when the same patient's Appointment Reminder passed."""
+    start = log.rfind("REMINDER SANITY REPORT (combined)")
+    if start < 0:
+        return None
+    lines = log[start:].splitlines()
+    sections, entries = [], []  # sections: [title], entries: dicts
+    section, entry, i = None, None, 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("Overall:"):
+            break
+        if line == _RS_RULE and i + 2 < len(lines) and lines[i + 2] == _RS_RULE:
+            section = lines[i + 1].strip()
+            sections.append(section)
+            i += 3
+            continue
+        match = _RS_ENTRY.match(line) if section else None
+        if match:
+            entry = {"section": section, "pat": match["pat"], "name": match["name"],
+                     "scenario": match["scenario"], "status": None, "reason": []}
+            entries.append(entry)
+        elif entry and line.startswith("  Status: "):
+            entry["status"] = line[len("  Status: "):].strip()
+        elif entry and line.startswith("  Failure Reason: "):
+            entry["reason"].append(line[len("  Failure Reason: "):].strip())
+        elif entry and entry["reason"] and line.startswith("  ") and not line.startswith("  Last Checked At:"):
+            entry["reason"].append(line.strip())  # the Insight log line under the reason
+        i += 1
+    if not entries:
+        return None
+
+    passed_appointment = {e["pat"] for e in entries
+                          if e["section"] == "Appointment Reminder" and e["status"] in ("PASS", "FAMILY")}
+
+    def passed(e: dict) -> bool:
+        if e["status"] in ("PASS", "FAMILY", "SKIP"):
+            return True
+        # A past appointment gets no Schedule Confirmation - the report shows it as PASS.
+        return e["section"] == "Schedule Confirmation" and e["pat"] in passed_appointment
+
+    counts = [{"title": title, "passed": sum(1 for e in entries if e["section"] == title and passed(e)),
+               "total": sum(1 for e in entries if e["section"] == title)} for title in sections]
+    failures = [{"section": e["section"],
+                 "name": e["name"] + (f" [{e['scenario']}]" if e["scenario"] else ""),
+                 "reason": " ".join(e["reason"])}
+                for e in entries if not passed(e)]
+    return [c for c in counts if c["total"]], failures
+
+
+def _reminder_sanity_html(page: str) -> tuple[list, list]:
+    """(sections, failures) from its HTML report: the stat tiles and FAIL rows."""
     sections = [{"title": _text(title), "passed": int(passed), "total": int(total)} for title, passed, total in re.findall(
         r'<div class="stat-label">(.*?)</div><div class="stat-value">(\d+)/(\d+)', page)]
-
     failures = []
     for card in page.split('<div class="card">')[1:]:
         heading = re.search(r"<h2>(.*?)</h2>", card, re.S)
@@ -87,19 +123,60 @@ def parse_reminder_sanity(cfg: dict, cwd: Path, log_path: Path, exit_code: int, 
         for row in re.findall(r'<div class="row fail">(.*?)<div class="proof">(.*?)</div>', card, re.S):
             title = re.search(r'<div class="row-title">(.*?)</div>', row[0], re.S)
             failures.append({"section": section, "name": _text(title.group(1)) if title else "", "reason": _text(row[1])})
+    return sections, failures
+
+
+def parse_reminder_sanity(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
+    """Reminder Sanity, read from what a normal run already produces (the
+    project itself is not changed for the dashboard):
+
+    - counts and failures: the console summary it prints at the end of every
+      run (in the run log). Its HTML report is only a fallback - the run
+      deletes it once the PDF is on Google Drive.
+    - overall: the "Overall: PASS|FAIL" line of that summary
+    - Drive link: the Drive folder its reports go to (GDRIVE_FOLDER_ID in its
+      .env), when the run says the report is on Drive - it doesn't print the
+      file's own link
+    """
+    log = ""
+    try:
+        log = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        pass
+    parsed = _reminder_sanity_console(log)
+    if parsed is None:
+        report = newest_match(cwd, cfg["glob"], started_ts)
+        if report is None:
+            failed = re.findall(r"Reminder Sanity run failed: (.+)", log)
+            return _empty("ERROR", failed[-1].strip() if failed else "Run ended before printing its results (see log)")
+        try:
+            parsed = _reminder_sanity_html(report.read_text(encoding="utf-8", errors="replace"))
+        except OSError as exc:
+            return _empty("ERROR", f"Unreadable report: {exc}")
+    sections, failures = parsed
 
     overall = re.findall(r"^Overall: (PASS|FAIL)\s*$", log, re.M)
-    passed, total = sum(s["passed"] for s in sections), sum(s["total"] for s in sections)
-    if overall:
-        status = overall[-1]
-    else:  # no console summary captured - fall back to the exit code
-        status = "PASS" if exit_code == 0 else "FAIL"
-    drive_ids = re.findall(r"Google Drive \(id=([\w-]+)\)|new revision \(id=([\w-]+)\)", log)
-    drive_id = next((a or b for a, b in reversed(drive_ids)), None)
+    status = overall[-1] if overall else ("PASS" if exit_code == 0 else "FAIL")
+
+    drive_url = None
+    if "Report is on Google Drive" in log:
+        folder = _env_value(cwd / ".env", "GDRIVE_FOLDER_ID")
+        if folder:
+            drive_url = f"https://drive.google.com/drive/folders/{folder}"
     summary = _empty(status)
-    summary.update(passed=passed, total=total, sections=sections, failures=failures,
-                   drive_url=f"https://drive.google.com/file/d/{drive_id}/view" if drive_id else None)
+    summary.update(passed=sum(s["passed"] for s in sections), total=sum(s["total"] for s in sections),
+                   sections=sections, failures=failures, drive_url=drive_url)
     return summary
+
+
+def _env_value(path: Path, key: str) -> Optional[str]:
+    try:
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            if line.startswith(key + "="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'") or None
+    except OSError:
+        pass
+    return None
 
 
 def parse_recall_results(cfg: dict, cwd: Path, log_path: Path, exit_code: int, started_ts: float) -> dict:
