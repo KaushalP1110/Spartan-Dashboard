@@ -15,6 +15,36 @@ the failures that need attention, and links to every report - all in one place.
 Each local automation runs **in its own project folder exactly as if you ran
 it by hand**, so Jenkins/CLI runs and dashboard runs behave the same.
 
+## Set it up on a Windows PC (install.ps1)
+
+The dashboard must run on a PC that is in the office and always on - teammates
+reach it at `http://<that PC's office IP>:8765`. To set it up there (or move it):
+
+1. In the folder where the QA projects should live (e.g. `C:\QA`):
+   ```
+   git clone https://github.com/KaushalP1110/Spartan-Dashboard.git
+   ```
+2. Run the setup (asks for the team password and Jenkins login):
+   ```
+   powershell -ExecutionPolicy Bypass -File .\Spartan-Dashboard\install.ps1
+   ```
+   Add `-CheckOnly` to only see what's missing, without changing anything.
+
+It checks the tools (git, Python 3.10+, Maven, JDK 21, Edge/Chrome), clones or
+updates Reminder-Sanity-Automation, spartan and CronReporting next to the
+dashboard, installs the Python packages, points the projects at OpenDental's
+MySQL host, creates `Spartan-Dashboard\.env`, offers to open the firewall port,
+registers the "Spartan Dashboard" logon task and starts it. Safe to run again.
+
+By hand (the script lists what's missing):
+- **Recall-Status-Automation** is not on GitHub - copy the folder over.
+- **Secrets**: each project's `.env` and the Google service-account JSON its
+  `GDRIVE_SERVICE_ACCOUNT_FILE` points at.
+- **OpenDental MySQL** must accept connections from the new PC.
+- **Reminder UI GChat button**: set `SPARTAN_REPORT_URL` in
+  Reminder-UI-Automation-PW's Jenkinsfile to the new PC's address.
+- Stop the old copy: `Unregister-ScheduledTask -TaskName "Spartan Dashboard"`.
+
 ## Run it in Docker (office network)
 
 It is the `spartan-dashboard` service in **spartan's `docker-compose.yml`**,
@@ -163,6 +193,7 @@ google_auth.py    Google sign-in (device + redirect flows, domain check)
 parsers.py        reads each automation's results into one summary format
 jenkins.py        trigger / follow / stop Jenkins builds (API token)
 jobs.json         the automations
+install.ps1       sets the dashboard up on a Windows PC (see above)
 Dockerfile, docker-entrypoint.sh   the image (service defined in ../spartan/docker-compose.yml)
 static/           index.html (dashboard), login.html
 data/             run history + logs (created on first run, gitignored)
