@@ -32,7 +32,7 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse, urlsplit
 
 import google_auth
 import jenkins
@@ -257,6 +257,39 @@ def _watch_local(job: dict, run_id: str, process: subprocess.Popen, log_file, st
             reports=run_reports(job, started_ts))
 
 
+def jenkins_report_path(job_id: str, build_number, rel: str) -> str:
+    """Dashboard address of a Jenkins build's archived report - served by
+    _serve_jenkins_report with the dashboard's Jenkins token, so people open
+    the report directly instead of being sent to the Jenkins login page."""
+    return f"/jenkins/{job_id}/{build_number}/{quote(rel)}"
+
+
+def _display_reports(job: dict, reports: list[dict]) -> list[dict]:
+    """Rewrites stored Jenkins artifact links (older runs, before reports went
+    through the dashboard) to the dashboard address."""
+    if job.get("type") != "jenkins" or not jenkins.is_configured():
+        return reports
+    job_path = urlsplit(jenkins.job_url(job["jenkins_job"])).path
+    out = []
+    for link in reports:
+        path = urlsplit(link.get("url", "")).path
+        number, sep, rel = path[len(job_path):].partition("/artifact/") if path.startswith(job_path) else ("", "", "")
+        if sep and number.isdigit():
+            rel = unquote(rel)
+            if not any(fnmatch.fnmatch(rel, spec["glob"]) for spec in job.get("jenkins_artifacts", [])):
+                continue  # no longer served (e.g. the old HTML report links)
+            link = {**link, "url": jenkins_report_path(job["id"], number, rel)}
+        out.append(link)
+    return out
+
+
+def _display_run(run: dict) -> dict:
+    job = JOBS.get(run.get("job_id"))
+    if not job or not run.get("reports"):
+        return run
+    return {**run, "reports": _display_reports(job, run["reports"])}
+
+
 def _jenkins_artifacts(job: dict, build_url: str, info: dict, summary: dict) -> tuple[dict, list[dict]]:
     """Links to the build's archived reports ("jenkins_artifacts" in jobs.json;
     the newest match when the build archived several runs' folders), and the
@@ -268,7 +301,7 @@ def _jenkins_artifacts(job: dict, build_url: str, info: dict, summary: dict) -> 
         matches = sorted(p for p in archived if fnmatch.fnmatch(p, spec["glob"]))
         if not matches:
             continue
-        links.append({"label": spec["label"], "url": jenkins.artifact_url(build_url, matches[-1])})
+        links.append({"label": spec["label"], "url": jenkins_report_path(job["id"], info.get("number"), matches[-1])})
         if spec.get("result") and info.get("result") != "ABORTED":
             try:
                 text = jenkins.artifact_text(build_url, matches[-1])
@@ -441,7 +474,7 @@ def latest_reports(job: dict) -> list[dict]:
 
 
 def status_payload(selected_job: str | None, user: str) -> dict:
-    runs = load_runs()
+    runs = [_display_run(r) for r in load_runs()]
     with _lock:
         active = {job_id: dict(a) for job_id, a in _active.items()}
     jobs = []
@@ -628,6 +661,33 @@ class Handler(BaseHTTPRequestHandler):
             headers["Content-Disposition"] = f'attachment; filename="{target.name}"'
         self._send(HTTPStatus.OK, target.read_bytes(), content_type, headers)
 
+    def _serve_jenkins_report(self, route: str):
+        """/jenkins/<job id>/<build number>/<archived path> - fetches the file
+        from Jenkins with the dashboard's token. Only paths matching one of the
+        job's "jenkins_artifacts" globs, so it can't be used to browse Jenkins."""
+        parts = route.split("/", 4)
+        if len(parts) != 5:
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        _, _, job_id, number, rel = parts
+        rel = unquote(rel)
+        job = JOBS.get(job_id)
+        if (not job or job["type"] != "jenkins" or not number.isdigit() or not jenkins.is_configured()
+                or ".." in rel.split("/") or rel.startswith("/")
+                or not any(fnmatch.fnmatch(rel, spec["glob"]) for spec in job.get("jenkins_artifacts", []))):
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        build_url = jenkins.job_url(job["jenkins_job"]) + f"{number}/"
+        try:
+            with jenkins._request(jenkins.artifact_url(build_url, rel)) as resp:
+                body = resp.read()
+        except jenkins.JenkinsError as exc:
+            message = f"Could not get this report from Jenkins: {exc}"
+            return self._send(HTTPStatus.BAD_GATEWAY, message.encode("utf-8"), "text/plain; charset=utf-8")
+        content_type = mimetypes.guess_type(rel)[0] or "application/octet-stream"
+        if content_type.startswith("text/") and "charset" not in content_type:
+            content_type += "; charset=utf-8"
+        headers = {"Content-Disposition": f'inline; filename="{rel.rsplit("/", 1)[-1]}"'}
+        self._send(HTTPStatus.OK, body, content_type, headers)
+
     def _google_callback(self, query: dict):
         state = (query.get("state") or [""])[0]
         cookie_state = _read_cookie(self.headers.get("Cookie"), "spartan_oauth_state")
@@ -670,7 +730,9 @@ class Handler(BaseHTTPRequestHandler):
         if user is None:
             if route.startswith("/api/"):
                 return self._json({"error": "login required"}, HTTPStatus.UNAUTHORIZED)
-            return self._redirect("/login")
+            # Come back to this page (e.g. a report linked from Google Chat) after signing in.
+            target = self.path if route not in ("/", "/index.html") else ""
+            return self._redirect("/login" + (f"?next={quote(target, safe='')}" if target else ""))
         if route in ("/", "/index.html"):
             return self._static("index.html")
         if route == "/api/status":
@@ -686,6 +748,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(HTTPStatus.OK, path.read_bytes(), "text/plain; charset=utf-8")
         if route.startswith("/files/"):
             return self._serve_report(route)
+        if route.startswith("/jenkins/"):
+            return self._serve_jenkins_report(route)
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self):
