@@ -82,6 +82,38 @@
   .theme-btn:hover { border-color: #64748b; background: rgba(255,255,255,.06); }
   .theme-btn svg.i { width: 15px; height: 15px; }
 
+
+  /* --- view tabs in the header --- */
+  .tabs { display: flex; gap: 4px; margin-left: 18px; }
+  .tab { color: #94a3b8; text-decoration: none; font-size: .86rem; font-weight: 600; padding: 7px 12px; border-radius: 8px; white-space: nowrap; }
+  .tab:hover { color: #fff; background: rgba(255,255,255,.06); text-decoration: none; }
+  .tab.active { color: #fff; background: rgba(255,255,255,.12); }
+  .nav-left { display: flex; align-items: center; min-width: 0; }
+
+  /* --- Docs & Test Cases --- */
+  .docs-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .fchip { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: 999px; padding: 6px 12px;
+           font-size: .82rem; font-weight: 600; }
+  .fchip:hover { border-color: var(--accent); color: var(--accent); }
+  .fchip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .fchip .n { opacity: .7; font-weight: 500; margin-left: 4px; }
+  .search { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface);
+            border-radius: 9px; padding: 0 12px; }
+  .search input { flex: 1; border: 0; background: transparent; color: var(--text); font: inherit; padding: 9px 0; outline: none; }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .doc-name { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); white-space: normal; }
+  .doc-name:hover { color: var(--accent); }
+  .ftype { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; font-size: .6rem; font-weight: 800; letter-spacing: .02em; flex: none; }
+  .ftype.doc { background: #e8f0fe; color: #1a73e8; } .ftype.sheet { background: #e6f4ea; color: #188038; }
+  .ftype.slides { background: #fef7e0; color: #b06000; } .ftype.pdf { background: #fce8e6; color: #c5221f; }
+  .ftype.image, .ftype.video, .ftype.file { background: var(--idle-bg); color: var(--idle); }
+  .doc-path { color: var(--muted); font-size: .8rem; white-space: normal; }
+  #docsPanel th:first-child { width: 46%; }
+  .docs-empty { padding: 26px 22px; color: var(--text-2); line-height: 1.6; }
+  .docs-empty code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: .82rem; }
+  .docs-empty ol { margin: 8px 0 0; padding-left: 20px; }
+  .muted { color: var(--muted); }
   .page { max-width: 1320px; margin: 0 auto; padding: 28px 24px 64px; }
   .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
   .page-head h1 { margin: 0; font-size: 1.5rem; letter-spacing: -.01em; }
@@ -256,7 +288,8 @@
   @media (max-width: 1100px) { .jobs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 700px) {
     .nav-in, .page { padding-left: 16px; padding-right: 16px; }
-    .brand span, .live span, .user .name, .theme-label { display: none; }
+    .brand span, .brand b, .live span, .user .name, .theme-label { display: none; }
+    .tabs { margin-left: 8px; } .tab { padding: 6px 9px; font-size: .8rem; }
     .jobs, .jobs[data-count] { grid-template-columns: 1fr; }
     .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi { padding: 12px; gap: 10px; } .kpi-ic { display: none; }
@@ -283,14 +316,21 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
   <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></symbol>
 </svg>
 
 <nav class="nav"><div class="nav-in">
-  <div class="brand">
+  <div class="nav-left"><div class="brand">
     <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path fill="#d4a017" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/><path fill="#0f172a" d="M12 5.2 7 7.1v3.9c0 3.4 2.1 6.4 5 7.6V5.2Z" opacity=".35"/></svg>
     <b>Spartan Dashboard</b><span>QA automation hub</span>
   </div>
+  <div class="tabs" role="tablist">
+    <a class="tab" href="#automations" data-view="automations">Automations</a>
+    <a class="tab" href="#docs" data-view="docs">Docs &amp; Test Cases</a>
+  </div></div>
   <div class="nav-right">
     <span class="live" id="live"><i></i><span id="liveText">Live</span></span>
     <button class="theme-btn" id="themeBtn" type="button"><svg class="i"><use href="#i-moon"/></svg><span class="theme-label">Night</span></button>
@@ -299,7 +339,7 @@
   </div>
 </div></nav>
 
-<main class="page">
+<main class="page" id="viewAutomations">
   <div class="page-head">
     <div><h1>Automations</h1><p>Run any suite with one click. Results, failures and reports update live.</p></div>
   </div>
@@ -314,6 +354,20 @@
       <thead><tr><th>Automation</th><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th><th>Log</th></tr></thead>
       <tbody id="recent"></tbody>
     </table></div>
+  </section>
+</main>
+
+<main class="page" id="viewDocs" hidden>
+  <div class="page-head">
+    <div><h1>Docs &amp; Test Cases</h1><p>Documentation and test-case sheets from Google Drive - always the latest version.</p></div>
+    <button class="btn btn-ghost" id="docsRefresh" type="button" title="Reload the list from Google Drive"><svg class="i"><use href="#i-refresh"/></svg>Refresh</button>
+  </div>
+  <div class="docs-bar">
+    <div class="chips" id="docsChips"></div>
+    <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="docsSearch" type="search" placeholder="Search by name or folder" autocomplete="off"></label>
+  </div>
+  <section class="panel" id="docsPanel">
+    <div class="docs-empty">Loading from Google Drive...</div>
   </section>
 </main>
 
@@ -680,6 +734,81 @@ document.getElementById("themeBtn").addEventListener("click", () => {
 });
 darkQuery.addEventListener("change", paintThemeButton);
 paintThemeButton();
+
+// --- Views: Automations | Docs & Test Cases (#automations / #docs) ---
+const FTYPE_LABEL = {doc: "DOC", sheet: "XLS", slides: "PPT", pdf: "PDF", image: "IMG", video: "VID", file: "FILE"};
+let docs = null, docsFolder = "all", docsLoading = false;
+
+function showView() {
+  const view = location.hash === "#docs" ? "docs" : "automations";
+  $("viewAutomations").hidden = view !== "automations";
+  $("viewDocs").hidden = view !== "docs";
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === view));
+  if (view === "docs" && !docs && !docsLoading) loadDocs(false);
+}
+
+async function loadDocs(refresh) {
+  docsLoading = true;
+  $("docsRefresh").disabled = true;
+  if (refresh || !docs) $("docsPanel").innerHTML = `<div class="docs-empty">Loading from Google Drive...</div>`;
+  try {
+    const res = await fetch("/api/docs" + (refresh ? "?refresh=1" : ""), {cache: "no-store"});
+    if (res.status === 401) { location.href = "/login?next=" + encodeURIComponent("/#docs"); return; }
+    docs = await res.json();
+  } catch (e) {
+    docs = {configured: true, error: "Dashboard not reachable", folders: []};
+  } finally {
+    docsLoading = false;
+    $("docsRefresh").disabled = false;
+  }
+  renderDocs();
+}
+
+function renderDocs() {
+  const d = docs;
+  if (!d) return;
+  if (!d.configured || (d.error && !d.folders.length)) {
+    $("docsChips").innerHTML = "";
+    $("docsPanel").innerHTML = `<div class="docs-empty">${d.error ? `<div class="alert error" style="margin-bottom:12px">${icon("alert")}<span>${esc(d.error)}</span></div>` : ""}
+      <b>No Google Drive folders or files added yet.</b> To show your documentation and test cases here:
+      <ol><li>Share each Drive folder or file (Viewer) with the dashboard's Google service account${d.service_account ? ` <code>${esc(d.service_account)}</code>` : ""}.</li>
+      <li>Add it to <code>Spartan-Dashboard/docs.json</code>, under <code>folders</code> (a folder link) or <code>files</code> (a single Sheet/Doc link with a <code>group</code>).</li>
+      <li>Click <b>Refresh</b>.</li></ol></div>`;
+    return;
+  }
+  const folders = d.folders;
+  const total = folders.reduce((n, f) => n + f.files.length, 0);
+  $("docsChips").innerHTML = [`<button class="fchip ${docsFolder === "all" ? "active" : ""}" data-folder="all">All<span class="n">${total}</span></button>`,
+    ...folders.map(f => `<button class="fchip ${docsFolder === f.id ? "active" : ""}" data-folder="${esc(f.id)}" title="${esc(f.description || "")}">${esc(f.name)}<span class="n">${f.files.length}</span></button>`)].join("");
+
+  const q = $("docsSearch").value.trim().toLowerCase();
+  const shown = folders.filter(f => docsFolder === "all" || f.id === docsFolder);
+  const rows = shown.flatMap(f => f.files.map(file => ({...file, folder: f.name})))
+    .filter(x => !q || `${x.name} ${x.path} ${x.folder}`.toLowerCase().includes(q))
+    .sort((a, b) => (b.modified || "").localeCompare(a.modified || ""));
+  const errors = shown.filter(f => f.error).map(f => `<div class="alert error" style="margin:14px 20px 0">${icon("alert")}<span>${esc(f.error)}</span></div>`).join("");
+  const openLinks = shown.filter(f => f.url).map(f => `<a class="link" href="${esc(f.url)}" target="_blank" rel="noopener">${icon("folder")}${esc(f.name)}</a>`).join("");
+  const body = rows.length ? rows.map(x => `<tr>
+      <td><a class="doc-name" href="${esc(x.url)}" target="_blank" rel="noopener"><span class="ftype ${esc(x.kind)}">${FTYPE_LABEL[x.kind] || "FILE"}</span>${esc(x.name)}</a></td>
+      <td><div class="doc-path">${esc(x.folder)}${x.path ? " / " + esc(x.path) : ""}</div></td>
+      <td title="${esc(x.modified ? new Date(x.modified).toLocaleString() : "")}">${x.modified ? ago(x.modified) : "-"}</td>
+      <td class="doc-path">${esc(/gserviceaccount\.com$/.test(x.by || "") ? "Automation" : (x.by || "-"))}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty-row">${q ? "No files match your search." : "This folder has no files yet."}</td></tr>`;
+  $("docsPanel").innerHTML = `${errors}
+    <div class="panel-head"><h2>${rows.length} file${rows.length === 1 ? "" : "s"}</h2><div class="links">${openLinks}</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Folder</th><th>Modified</th><th>By</th></tr></thead><tbody>${body}</tbody>
+    </table></div>`;
+}
+
+window.addEventListener("hashchange", showView);
+$("docsRefresh").addEventListener("click", () => loadDocs(true));
+$("docsSearch").addEventListener("input", renderDocs);
+$("docsChips").addEventListener("click", (ev) => {
+  const chip = ev.target.closest("[data-folder]");
+  if (chip) { docsFolder = chip.dataset.folder; renderDocs(); }
+});
+showView();
 
 refresh();
 setInterval(refresh, 3000);

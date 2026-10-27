@@ -34,6 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse, urlsplit
 
+import gdrive_docs
 import google_auth
 import jenkins
 import parsers
@@ -42,6 +43,7 @@ ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 # Overridable so a test jobs file / data folder can be used.
 JOBS_FILE = Path(os.environ.get("SPARTAN_JOBS_FILE", ROOT / "jobs.json"))
+DOCS_FILE = Path(os.environ.get("SPARTAN_DOCS_FILE", ROOT / "docs.json"))  # Drive folders for "Docs & Test Cases"
 DATA_DIR = Path(os.environ.get("SPARTAN_DATA_DIR", ROOT / "data"))
 LOG_DIR = DATA_DIR / "logs"
 RUNS_FILE = DATA_DIR / "runs.json"
@@ -73,6 +75,7 @@ def load_env_file(path: Path) -> dict:
 CONFIG = load_env_file(Path(os.environ.get("SPARTAN_ENV_FILE", ROOT / ".env")))
 jenkins.CONFIG = CONFIG
 google_auth.CONFIG = CONFIG
+gdrive_docs.CONFIG = CONFIG
 BASE_ENV = dict(os.environ)
 
 
@@ -738,6 +741,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/status":
             job = (parse_qs(url.query).get("job") or [None])[0]
             return self._json(status_payload(job, user))
+        if route == "/api/docs":
+            refresh = (parse_qs(url.query).get("refresh") or [""])[0] == "1"
+            return self._json(gdrive_docs.listing(DOCS_FILE, refresh=refresh))
         if route.startswith("/api/log/"):
             run_id = route.rsplit("/", 1)[-1]
             if not all(c.isalnum() or c == "_" for c in run_id):

@@ -139,6 +139,34 @@ Sessions last 12 hours and are cleared when the dashboard restarts.
   (OpenDental MySQL, Adit, Google).
 - All projects checked out side by side in one folder (paths are in `jobs.json`).
 
+## Docs & Test Cases (Google Drive)
+
+The **Docs & Test Cases** tab lists the Google Drive folders and single files
+named in `docs.json` - documentation, test-case sheets, anything kept in Drive -
+with search, a chip per folder, type icon, last modified and who changed it.
+Files open in Drive. The list is read live (cached 5 minutes; **Refresh**
+reloads it), subfolders included (3 levels).
+
+To add a folder or a single Doc/Sheet:
+1. Share it with the dashboard's Google service account as **Viewer** (the
+   tab shows the account's email). For a Shared Drive, add the account as a
+   member.
+2. Add it to `docs.json` - a folder lists its files (3 levels of
+   subfolders); a single file shows under the chip named by its `group`
+   (a folder with the same name shares the chip):
+   ```json
+   {"folders": [
+     {"name": "Documentation", "folder": "https://drive.google.com/drive/folders/..."}
+   ],
+    "files": [
+     {"name": "Recall Test Cases", "file": "https://docs.google.com/spreadsheets/d/.../edit", "group": "Test Cases"}
+   ]}
+   ```
+3. Click **Refresh** (no restart needed).
+
+`GDRIVE_SERVICE_ACCOUNT_FILE` in the dashboard `.env` points at the
+service-account JSON key (the same account the automations upload reports with).
+
 ## How it behaves
 
 - **One run per automation at a time.** Jobs that must never overlap can
@@ -193,6 +221,8 @@ google_auth.py    Google sign-in (device + redirect flows, domain check)
 parsers.py        reads each automation's results into one summary format
 jenkins.py        trigger / follow / stop Jenkins builds (API token)
 jobs.json         the automations
+docs.json         Drive folders for the Docs & Test Cases tab
+gdrive_docs.py    reads those folders from Google Drive (read-only)
 install.ps1       sets the dashboard up on a Windows PC (see above)
 Dockerfile, docker-entrypoint.sh   the image (service defined in ../spartan/docker-compose.yml)
 static/           index.html (dashboard), login.html

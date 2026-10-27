@@ -1,0 +1,51 @@
+{
+  "_help": "Shown under 'Docs & Test Cases'. folders: a Drive folder's link or ID (its files and 3 levels of subfolders are listed). files: a single Docs/Sheets/Slides/Drive file link, shown under a chip named by 'group'. Share each folder/file with the dashboard's Google service account (Viewer). Click Refresh on the page after editing - no restart needed.",
+  "folders": [],
+  "files": [
+    {
+      "name": "Eaglesoft Update Delete",
+      "file": "https://docs.google.com/spreadsheets/d/19CPYzbu4SsyrQPfITlHvZeRsoOU_GCvaCkSLAdWaCfQ/edit?gid=613136988#gid=613136988",
+      "group": "Test Cases"
+    },
+    {
+      "name": "AI Recare",
+      "file": "https://docs.google.com/spreadsheets/d/1gX-Jh59ejU4fy8KFdstw5-d82up_zkLfCcdBSqUlpC0/edit?usp=sharing",
+      "group": "Test Cases"
+    },
+    {
+      "name": "AI Recare Document",
+      "file": "https://docs.google.com/document/d/1q3fgigP40syxUex5uJB4L_0hovk-ohQl4GHd4lmwLnA/edit?usp=sharing",
+      "group": "Documentation"
+    },
+    {
+      "name": "Reminder testcase",
+      "file": "https://docs.google.com/spreadsheets/d/1ubwJoy7_ypXXa3BRVtDWtbaoxM7_VatoRK6-P2N3vBs/edit?usp=sharing",
+      "group": "Test Cases"
+    },
+    {
+      "name": "Opendental AI Recare",
+      "file": "https://docs.google.com/document/d/17iBz0IK7cqmGOfC5EUvarOgvMlb-zNRZFBdSj5uYb90/edit?usp=sharing",
+      "group": "Documentation"
+    },
+    {
+      "name": "Recall Report Logic",
+      "file": "https://docs.google.com/document/d/1lpfJbPQR7lmGcfvH6oLqUe-za8j4SfTDv-4YlITCSBQ/edit?usp=sharing",
+      "group": "Documentation"
+    },
+    {
+      "name": "Insight Log",
+      "file": "https://docs.google.com/spreadsheets/d/1GwGMZhN9iNhP1JeYciqNQW17QvJ7aAhFLHTmOY3Blz0/edit?usp=sharing",
+      "group": "Documentation"
+    },
+    {
+      "name": "Getting Started - Auto Reminder",
+      "file": "https://docs.google.com/spreadsheets/d/1L8ZLp3xF010lJV9n-VE-CrVYAHQfXavG3jL20Rzv6_4/edit?usp=sharing",
+      "group": "Documentation"
+    },
+    {
+      "name": "Recall Test Cases",
+      "file": "https://docs.google.com/spreadsheets/d/15PVy2NpF6U4VSZepim6bNyeyujif-SW6WlCSquIfT4E/edit?usp=sharing",
+      "group": "Test Cases"
+    }
+  ]
+}
