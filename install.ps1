@@ -89,7 +89,7 @@ $mvn = Get-Command mvn -ErrorAction SilentlyContinue
 $ideaMvn = Get-ChildItem "C:\Program Files\JetBrains\*\plugins\maven\lib\maven3\bin\mvn.cmd" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($mvn) { Ok "Maven ($($mvn.Source))" }
 elseif ($ideaMvn) { Ok "Maven (IntelliJ's: $($ideaMvn.FullName))" }
-else { Warn "Maven not found (needed for Spartan API and Cron Reporting) - install Maven or IntelliJ, or set MAVEN_CMD in Spartan-Dashboard\.env" }
+else { Warn "Maven not found (needed for Cron Reporting) - install Maven or IntelliJ, or set MAVEN_CMD in Spartan-Dashboard\.env" }
 
 $jdk = @(Get-ChildItem "$env:USERPROFILE\.jdks\*21*", "C:\Program Files\Java\jdk-21*", "C:\Program Files\Eclipse Adoptium\jdk-21*" -Directory -ErrorAction SilentlyContinue) + @(Get-ChildItem "C:\Program Files\JetBrains\*\jbr" -Directory -ErrorAction SilentlyContinue)
 if ($env:JAVA_HOME -or $jdk) { Ok "Java (JAVA_HOME or a JDK 21 was found)" } else { Warn "JDK 21 not found (needed for the Maven projects) - install it, or set JAVA_HOME in Spartan-Dashboard\.env" }
@@ -106,7 +106,6 @@ if (Test-Path (Join-Path $Dashboard ".git")) {
 }
 $repos = @(
     @{ Name = "Reminder-Sanity-Automation"; Url = "https://github.com/KaushalP1110/Reminder-Sanity-Automation.git"; Branch = "main" },
-    @{ Name = "spartan"; Url = "https://github.com/KaushalP1110/spartan.git"; Branch = "main" },
     @{ Name = "CronReporting"; Url = "https://github.com/ShivamBhayani1/CronReporting.git"; Branch = "Development" }
 )
 foreach ($repo in $repos) {

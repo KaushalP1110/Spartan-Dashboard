@@ -88,44 +88,6 @@
       "est_minutes": 15
     },
     {
-      "id": "spartan",
-      "name": "Spartan API",
-      "description": "AI Recare Outreach suite: Broken Appointments, Recall Appointments and Unscheduled Treatment API comparisons.",
-      "kind": "Maven",
-      "type": "local",
-      "cwd": "../spartan",
-      "command": [
-        "{mvn}",
-        "-B",
-        "test"
-      ],
-      "requires": [
-        ".env"
-      ],
-      "result": {
-        "type": "testng",
-        "path": "target/surefire-reports/testng-results.xml"
-      },
-      "links": [
-        {
-          "label": "Configure (Spartan UI)",
-          "url": "http://172.16.1.89:8102"
-        }
-      ],
-      "warning": "Edit settings in the Spartan UI; don't start tests there at the same time.",
-      "reports": [
-        {
-          "label": "Comparison report",
-          "glob": "target/adit-comparison-report.html"
-        },
-        {
-          "label": "TestNG report",
-          "glob": "target/surefire-reports/emailable-report.html"
-        }
-      ],
-      "est_minutes": 10
-    },
-    {
       "id": "cron_reporting",
       "name": "Cron Reporting",
       "description": "Collects failed cron jobs and SMS/email counts, exports them to Excel and posts the summary to Google Chat.",

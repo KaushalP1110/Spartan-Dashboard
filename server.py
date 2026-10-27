@@ -477,7 +477,8 @@ def latest_reports(job: dict) -> list[dict]:
 
 
 def status_payload(selected_job: str | None, user: str) -> dict:
-    runs = [_display_run(r) for r in load_runs()]
+    # Runs of automations no longer in jobs.json stay in runs.json but aren't shown.
+    runs = [_display_run(r) for r in load_runs() if r.get("job_id") in JOBS]
     with _lock:
         active = {job_id: dict(a) for job_id, a in _active.items()}
     jobs = []

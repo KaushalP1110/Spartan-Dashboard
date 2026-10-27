@@ -8,7 +8,6 @@ the failures that need attention, and links to every report - all in one place.
 |---|---|---|
 | Reminder Sanity | `python runners/run_all_reminders_sanity.py` | its console summary in the run log (+ HTML/PDF links, or its Google Drive folder once the run moved the report there) |
 | Recall Status | `python runners/run_recall_status_check.py` | `recall_status_results_*.json` (+ HTML/PDF) |
-| Spartan API | `mvn -B test` | `target/surefire-reports/testng-results.xml` (+ comparison report) |
 | Cron Reporting | `mvn -B test` | `testng-results.xml` (+ Excel export) |
 | Reminder UI | Jenkins job `Reminder UI Automation Playwright` | the build's archived `test-reports/<run>/report.txt` (+ Playwright HTML report) |
 
@@ -31,7 +30,7 @@ reach it at `http://<that PC's office IP>:8765`. To set it up there (or move it)
    Add `-CheckOnly` to only see what's missing, without changing anything.
 
 It checks the tools (git, Python 3.10+, Maven, JDK 21, Edge/Chrome), clones or
-updates Reminder-Sanity-Automation, spartan and CronReporting next to the
+updates Reminder-Sanity-Automation and CronReporting next to the
 dashboard, installs the Python packages, points the projects at OpenDental's
 MySQL host, creates `Spartan-Dashboard\.env`, offers to open the firewall port,
 registers the "Spartan Dashboard" logon task and starts it. Safe to run again.
@@ -171,10 +170,6 @@ service-account JSON key (the same account the automations upload reports with).
 
 - **One run per automation at a time.** Jobs that must never overlap can
   share a `lock` in `jobs.json`.
-- The Spartan card links to the existing Spartan UI (via the QA portal,
-  `http://172.16.1.89:8102`) for editing its `.env`.
-  Don't start tests there while the dashboard runs Spartan - both use the
-  same folder.
 - **Stop** kills the run (the whole process tree). Whatever it already set
   up - appointments, recalls - is **not** cleaned up.
 - A result is only trusted if its file was written during this run, so a
