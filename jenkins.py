@@ -145,6 +145,20 @@ def last_build(job: str) -> Optional[dict]:
     return info
 
 
+def recent_builds(job: str, limit: int = 10) -> list[dict]:
+    """The job's newest builds, newest first, with who or what started each."""
+    tree = (f"builds[number,building,result,url,timestamp,duration,"
+            f"actions[causes[shortDescription,userName]]]{{0,{limit}}}")
+    builds = _json(job_url(job) + "api/json?tree=" + urllib.parse.quote(tree, safe=",[]")).get("builds", [])
+    for build in builds:
+        if build.get("url"):
+            build["url"] = _rebase(build["url"])
+        causes = [c for a in build.pop("actions", None) or [] if a for c in a.get("causes", [])]
+        build["started_by"] = (next((c["userName"] for c in causes if c.get("userName")), None) or next(
+            (c["shortDescription"].removeprefix("Started by ") for c in causes if c.get("shortDescription")), "Jenkins")).strip()
+    return builds
+
+
 def summarize(build: dict, report: Optional[dict]) -> dict:
     result = build.get("result")
     status = {"SUCCESS": "PASS", "UNSTABLE": "FAIL", "FAILURE": "FAIL"}.get(result, "ERROR")

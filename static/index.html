@@ -243,6 +243,12 @@
   .row-links .link svg.i { width: 12px; height: 12px; }
   .row-links .link:hover, .links .link:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .empty-row { color: var(--muted); padding: 22px 20px; text-align: center; }
+  .act-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  .act-filters select { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 9px; padding: 8px 10px;
+                        font: inherit; font-size: .82rem; cursor: pointer; }
+  .act-filters select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .act-filters .search { min-width: 180px; }
+  .act-filters .search input { padding: 7px 0; font-size: .82rem; }
 
   /* --- detail drawer --- */
   .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s; }
@@ -350,6 +356,18 @@
 
   <section class="panel">
     <div class="panel-head"><h2>Recent activity</h2><span id="recentCount"></span></div>
+    <div class="act-filters" id="actFilters">
+      <select id="fJob" aria-label="Automation"><option value="">All automations</option></select>
+      <select id="fStatus" aria-label="Result">
+        <option value="">All results</option><option value="pass">Passed</option><option value="fail">Failed</option>
+        <option value="error">Error</option><option value="stopped">Stopped</option><option value="interrupted">Interrupted</option><option value="running">Running</option>
+      </select>
+      <select id="fSource" aria-label="Source">
+        <option value="">All sources</option><option value="dashboard">Started from dashboard</option><option value="jenkins">Jenkins pipeline</option>
+      </select>
+      <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="fSearch" type="search" placeholder="Search run by or automation" autocomplete="off"></label>
+      <button class="btn btn-ghost" id="fClear" type="button" hidden>Clear</button>
+    </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Automation</th><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th><th>Log</th></tr></thead>
       <tbody id="recent"></tbody>
@@ -668,10 +686,37 @@ function render() {
   renderKpis();
   renderJobs();
   renderDrawer();
-  $("recentCount").textContent = state.recent.length ? `Last ${state.recent.length} runs` : "";
-  $("recent").innerHTML = state.recent.length ? historyRows(state.recent, true)
-    : `<tr><td colspan="8" class="empty-row">No runs yet - pick an automation above and click Run.</td></tr>`;
+  renderRecent();
 }
+
+// --- Recent activity filters
+function renderRecent() {
+  const fJob = $("fJob");
+  const jobOptions = state.jobs.map(j => j.id).join(",");
+  if (fJob.dataset.jobs !== jobOptions) {  // only when the automations change, so an open dropdown isn't reset
+    const keep = fJob.value;
+    fJob.innerHTML = `<option value="">All automations</option>` + state.jobs.map(j => `<option value="${esc(j.id)}">${esc(j.name)}</option>`).join("");
+    fJob.value = state.jobs.some(j => j.id === keep) ? keep : "";
+    fJob.dataset.jobs = jobOptions;
+  }
+  const job = fJob.value, status = $("fStatus").value, source = $("fSource").value;
+  const q = $("fSearch").value.trim().toLowerCase();
+  const filtered = state.recent.filter(r => (!job || r.job_id === job) && (!status || r.status === status)
+    && (!source || (r.source === "jenkins" ? "jenkins" : "dashboard") === source)
+    && (!q || `${r.started_by || ""} ${r.job_name || ""}`.toLowerCase().includes(q)));
+  const active = !!(job || status || source || q);
+  $("fClear").hidden = !active;
+  $("recentCount").textContent = !state.recent.length ? ""
+    : active ? `${filtered.length} of last ${state.recent.length} runs` : `Last ${state.recent.length} runs`;
+  $("recent").innerHTML = filtered.length ? historyRows(filtered, true)
+    : `<tr><td colspan="8" class="empty-row">${state.recent.length ? "No runs match these filters." : "No runs yet - pick an automation above and click Run."}</td></tr>`;
+}
+["fJob", "fStatus", "fSource"].forEach(id => $(id).addEventListener("change", () => state && renderRecent()));
+$("fSearch").addEventListener("input", () => state && renderRecent());
+$("fClear").addEventListener("click", () => {
+  ["fJob", "fStatus", "fSource", "fSearch"].forEach(id => { $(id).value = ""; });
+  if (state) renderRecent();
+});
 
 async function refresh() {
   try {

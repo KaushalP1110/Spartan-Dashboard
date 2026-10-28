@@ -27,7 +27,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -316,6 +316,19 @@ def _jenkins_artifacts(job: dict, build_url: str, info: dict, summary: dict) -> 
     return summary, links
 
 
+def _jenkins_results(job: dict, build_url: str, info: dict) -> tuple[str, dict, list[dict]]:
+    """(status, summary, report links) of a finished build."""
+    summary = jenkins.summarize(info, jenkins.test_report(build_url))
+    links = [{"label": f"Jenkins build #{info.get('number')}", "url": build_url}]
+    if not job.get("jenkins_artifacts"):
+        links.append({"label": "Test results", "url": build_url + "testReport/"})
+    links += [{"label": link["label"], "url": build_url + link["path"]} for link in job.get("jenkins_links", [])]
+    summary, artifact_links = _jenkins_artifacts(job, build_url, info, summary)
+    links += artifact_links
+    status = "stopped" if info.get("result") == "ABORTED" else summary["overall_status"].lower()
+    return status, summary, links
+
+
 def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
     log = log_path(run_id)
     build_url = None
@@ -347,14 +360,7 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
             if not info.get("building"):
                 break
             time.sleep(10)
-        summary = jenkins.summarize(info, jenkins.test_report(build_url))
-        links = [{"label": f"Jenkins build #{info.get('number')}", "url": build_url}]
-        if not job.get("jenkins_artifacts"):
-            links.append({"label": "Test results", "url": build_url + "testReport/"})
-        links += [{"label": link["label"], "url": build_url + link["path"]} for link in job.get("jenkins_links", [])]
-        summary, artifact_links = _jenkins_artifacts(job, build_url, info, summary)
-        links += artifact_links
-        status = "stopped" if info.get("result") == "ABORTED" else summary["overall_status"].lower()
+        status, summary, links = _jenkins_results(job, build_url, info)
         _finish(job, run_id, status=status, summary=summary, reports=links, jenkins_build_url=build_url)
     except jenkins.JenkinsError as exc:
         message = str(exc)
@@ -453,14 +459,67 @@ _jenkins_last: dict[str, dict | None] = {}
 _report_cache: dict[str, tuple[float, list]] = {}
 
 
+JENKINS_IMPORT_BUILDS = 10  # newest builds checked for ones started outside the dashboard
+JENKINS_IMPORT_DAYS = 2     # pipeline builds older than this aren't shown
+
+
+def _prune_jenkins_imports(cutoff: datetime) -> None:
+    """Drops imported pipeline builds older than the cutoff (dashboard runs stay)."""
+    with _lock:
+        runs = load_runs()
+        old = [r for r in runs if r.get("source") == "jenkins" and datetime.fromisoformat(r["started_at"]) < cutoff]
+        if not old:
+            return
+        save_runs([r for r in runs if r not in old])
+    for run in old:
+        log_path(run["id"]).unlink(missing_ok=True)
+
+
+def _import_jenkins_builds(job: dict) -> None:
+    """Adds finished builds started in the Jenkins pipeline itself (timer,
+    someone in Jenkins) in the last JENKINS_IMPORT_DAYS days to the run
+    history, with the same results, reports and log as a dashboard run."""
+    cutoff = datetime.now().astimezone() - timedelta(days=JENKINS_IMPORT_DAYS)
+    _prune_jenkins_imports(cutoff)
+    known = {r.get("jenkins_build_url") for r in load_runs() if r.get("job_id") == job["id"]}
+    for build in reversed(jenkins.recent_builds(job["jenkins_job"], JENKINS_IMPORT_BUILDS)):
+        url = build.get("url")
+        if not url or build.get("building") or url in known or build["timestamp"] / 1000 < cutoff.timestamp():
+            continue
+        started = datetime.fromtimestamp(build["timestamp"] / 1000).astimezone()
+        finished = datetime.fromtimestamp((build["timestamp"] + (build.get("duration") or 0)) / 1000).astimezone()
+        run_id = f"{started.strftime('%Y%m%d_%H%M%S')}_{job['id']}_b{build['number']}"
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_path(run_id).write_text(jenkins.console_text(url), encoding="utf-8")
+        status, summary, links = _jenkins_results(job, url, build)
+        record = {"id": run_id, "job_id": job["id"], "job_name": job["name"], "status": status,
+                  "started_at": started.isoformat(timespec="seconds"),
+                  "finished_at": finished.isoformat(timespec="seconds"),
+                  "started_by": "Jenkins schedule" if build["started_by"] == "timer" else f"{build['started_by']} (Jenkins)",
+                  "exit_code": None,
+                  "summary": summary, "reports": links, "jenkins_build_url": url, "source": "jenkins"}
+        with _lock:
+            runs = load_runs()
+            if any(r.get("jenkins_build_url") == url for r in runs):
+                continue
+            runs.append(record)
+            runs.sort(key=lambda r: datetime.fromisoformat(r["started_at"]), reverse=True)
+            save_runs(runs)
+
+
 def _jenkins_poller() -> None:
-    """Keeps the latest Jenkins build per Jenkins job fresh, so builds started
-    from Jenkins itself (schedules, other people) show on the card too."""
+    """Keeps the latest Jenkins build per Jenkins job fresh, and imports
+    builds started from Jenkins itself (schedules, other people), so they
+    show on the card and in the history too."""
     while True:
         if jenkins.is_configured():
             for job in JOBS.values():
                 if job["type"] == "jenkins":
                     _jenkins_last[job["id"]] = jenkins.last_build(job["jenkins_job"])
+                    try:
+                        _import_jenkins_builds(job)
+                    except (jenkins.JenkinsError, OSError, ValueError, KeyError) as exc:
+                        print(f"[jenkins] could not import builds of {job['jenkins_job']}: {exc}", flush=True)
         time.sleep(60)
 
 
@@ -500,7 +559,7 @@ def status_payload(selected_job: str | None, user: str) -> dict:
             "jenkins_last": _jenkins_last.get(job["id"]),
             "pass_streak": [r["status"] for r in job_runs if r["status"] != "running"][:10],
         })
-    payload = {"user": user, "server_time": _now(), "jobs": jobs, "recent": runs[:40]}
+    payload = {"user": user, "server_time": _now(), "jobs": jobs, "recent": runs[:100]}
     if selected_job in JOBS:
         job_runs = [r for r in runs if r["job_id"] == selected_job]
         shown = job_runs[0] if job_runs else None
