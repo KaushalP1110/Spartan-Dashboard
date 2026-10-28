@@ -44,6 +44,28 @@ By hand (the script lists what's missing):
   Reminder-UI-Automation-PW's Jenkinsfile to the new PC's address.
 - Stop the old copy: `Unregister-ScheduledTask -TaskName "Spartan Dashboard"`.
 
+### Moving it from one PC/VM to another
+
+The bundle carries what isn't on GitHub, so nothing has to be copied by hand.
+
+1. On the old PC, pack the secrets, Recall-Status-Automation, CronReporting's
+   working copy and the run history into `Desktop\spartan-move.zip`:
+   ```
+   powershell -ExecutionPolicy Bypass -File .\Spartan-Dashboard\export-bundle.ps1
+   ```
+2. Copy the zip to the new PC (e.g. RDP copy/paste), then in an admin PowerShell:
+   ```
+   mkdir C:\QA; cd C:\QA
+   git clone https://github.com/KaushalP1110/Spartan-Dashboard.git
+   powershell -ExecutionPolicy Bypass -File .\Spartan-Dashboard\install.ps1 -Bundle $HOME\Desktop\spartan-move.zip
+   ```
+   It only fills in what the new PC doesn't have yet (never overwrites a `.env`
+   or the run history), puts the service-account key in `C:\QA\secrets` and
+   repoints every `GDRIVE_SERVICE_ACCOUNT_FILE` there.
+3. **Delete the zip from both PCs** - it holds the passwords and tokens.
+4. Keep the new PC's user logged in (disconnecting RDP is fine, signing out
+   stops the dashboard), then do the GChat button and old-copy steps above.
+
 ## Run it in Docker (office network)
 
 It is the `spartan-dashboard` service in **spartan's `docker-compose.yml`**,
@@ -219,6 +241,7 @@ jobs.json         the automations
 docs.json         Drive folders for the Docs & Test Cases tab
 gdrive_docs.py    reads those folders from Google Drive (read-only)
 install.ps1       sets the dashboard up on a Windows PC (see above)
+export-bundle.ps1 packs what isn't on GitHub, for moving to another PC (see above)
 Dockerfile, docker-entrypoint.sh   the image (service defined in ../spartan/docker-compose.yml)
 static/           index.html (dashboard), login.html
 data/             run history + logs (created on first run, gitignored)

@@ -17,11 +17,19 @@ and prints a checklist of what still needs a person. Safe to run again.
 Secrets are never downloaded: the projects' own .env files and the Google
 Drive service-account key must be copied over by hand - the checklist says
 which are missing.
+
+Moving from another PC: run export-bundle.ps1 there, copy the zip here and
+pass it with -Bundle. It fills in what isn't on GitHub (the .env files, the
+service-account key, Recall-Status-Automation, CronReporting's working copy,
+the run history) - only where this PC doesn't have it yet:
+    powershell -ExecutionPolicy Bypass -File .\Spartan-Dashboard\install.ps1 -Bundle $HOME\Desktop\spartan-move.zip
 #>
 param(
     [string]$JenkinsUrl = "http://localhost:8080",  # Jenkins runs on this PC? keep localhost
     [string]$OpenDentalDbHost = "",                 # PC with OpenDental's MySQL, e.g. 172.16.3.71
     [int]$Port = 8765,
+    [string]$Bundle = "",                           # spartan-move.zip from export-bundle.ps1 (moving from another PC)
+    [switch]$NoAutoStart,                           # set up, but don't register or start the logon task
     [switch]$CheckOnly                              # report only, change nothing
 )
 
@@ -30,6 +38,8 @@ $Dashboard = $PSScriptRoot
 $Root = Split-Path $Dashboard -Parent
 $TaskName = "Spartan Dashboard"
 $script:Todo = New-Object System.Collections.Generic.List[string]
+$script:BundleKeys = @{}    # key file name -> where -Bundle put it
+$script:PendingEnv = $null  # Reminder Sanity .env from -Bundle, placed once step 2 has cloned it
 
 function Step($text) { Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan }
 function Ok($text) { Write-Host "  OK  $text" -ForegroundColor Green }
@@ -97,6 +107,73 @@ if ($env:JAVA_HOME -or $jdk) { Ok "Java (JAVA_HOME or a JDK 21 was found)" } els
 $browser = @("C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", "C:\Program Files\Google\Chrome\Application\chrome.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($browser) { Ok "Edge/Chrome for PDF reports" } else { Warn "Edge/Chrome not found - Reminder Sanity / Recall Status PDF reports will be skipped" }
 
+# --- 1b. Bundle from the old PC (optional) ------------------------------------------
+if ($Bundle) {
+    Step "1b. Bundle from the old PC ($Bundle)"
+    if (-not (Test-Path $Bundle)) { Warn "Bundle '$Bundle' not found - copy spartan-move.zip here first"; return }
+    $unpacked = Join-Path $env:TEMP ("spartan-bundle-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory((Resolve-Path $Bundle).Path, $unpacked)
+    try {
+        # Projects that aren't (fully) on GitHub - only where missing, so step 2 won't clone over them.
+        foreach ($dir in @(Get-ChildItem "$unpacked\projects" -Directory -ErrorAction SilentlyContinue)) {
+            $target = Join-Path $Root $dir.Name
+            if (Test-Path $target) { Info "$($dir.Name) already here - kept as is" }
+            elseif ($CheckOnly) { Info "$($dir.Name) would be copied from the bundle" }
+            else { Copy-Item $dir.FullName $target -Recurse; Ok "$($dir.Name) copied from the bundle" }
+        }
+
+        # Service-account key -> <projects>\secrets, then point every .env at it.
+        $keyDir = Join-Path $Root "secrets"
+        $keyMap = @{}
+        foreach ($key in @(Get-ChildItem "$unpacked\secrets\keys" -File -ErrorAction SilentlyContinue)) {
+            $keyMap[$key.Name] = Join-Path $keyDir $key.Name
+            if ($CheckOnly) { Info "Key $($key.Name) would be placed in $keyDir" }
+            elseif (-not (Test-Path $keyMap[$key.Name])) {
+                New-Item -ItemType Directory -Force $keyDir | Out-Null
+                Copy-Item $key.FullName $keyMap[$key.Name]
+                Ok "Google service-account key -> $($keyMap[$key.Name])"
+            }
+        }
+
+        foreach ($envFile in @(Get-ChildItem "$unpacked\secrets" -Filter "*.env" -File -ErrorAction SilentlyContinue)) {
+            $name = $envFile.BaseName
+            $projectDir = Join-Path $Root $name
+            $target = Join-Path $projectDir ".env"
+            if ($CheckOnly) { Info "$name\.env would be $(if (Test-Path $target) { 'kept (exists)' } else { 'copied from the bundle' })"; continue }
+            if ($name -eq "Reminder-Sanity-Automation" -and -not (Test-Path $projectDir)) {
+                # Cloned in step 2 - park the .env until then.
+                $script:PendingEnv = @{ From = $envFile.FullName; To = $target }
+                continue
+            }
+            if (-not (Test-Path $projectDir)) { Warn "$name is not here - its .env from the bundle was not used"; continue }
+            if (Test-Path $target) { Info "$name\.env exists - kept as is" }
+            else { Copy-Item $envFile.FullName $target; Ok "$name\.env copied from the bundle" }
+        }
+
+        # Run history - only if this dashboard has none yet.
+        $dataDir = Join-Path $Dashboard "data"
+        if (Test-Path "$unpacked\data\runs.json") {
+            if (Test-Path "$dataDir\runs.json") { Info "Run history exists here - kept as is" }
+            elseif ($CheckOnly) { Info "Run history would be copied from the bundle" }
+            else {
+                New-Item -ItemType Directory -Force $dataDir | Out-Null
+                Copy-Item "$unpacked\data\runs.json" $dataDir
+                if (Test-Path "$unpacked\data\logs") { Copy-Item "$unpacked\data\logs" $dataDir -Recurse -Force }
+                Ok "Run history copied from the bundle"
+            }
+        }
+        $script:BundleKeys = $keyMap
+    } finally {
+        if ($script:PendingEnv) {
+            $parked = Join-Path $env:TEMP "spartan-bundle-reminder-sanity.env"
+            Copy-Item $script:PendingEnv.From $parked -Force
+            $script:PendingEnv.From = $parked
+        }
+        Remove-Item $unpacked -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # --- 2. Projects ---------------------------------------------------------------
 Step "2. Projects (next to Spartan-Dashboard)"
 if (Test-Path (Join-Path $Dashboard ".git")) {
@@ -124,6 +201,30 @@ foreach ($repo in $repos) {
 $recall = Join-Path $Root "Recall-Status-Automation"
 if (Test-Path $recall) { Ok "Recall-Status-Automation present" }
 else { Warn "Recall-Status-Automation is not on GitHub - copy the whole folder from Kaushal's PC (IdeaProjects\Recall-Status-Automation) to $recall" }
+
+# Bundle, part 2 (now that the projects are cloned): the parked .env, and
+# paths in the .env files that pointed at the old PC.
+if ($Bundle -and -not $CheckOnly) {
+    if ($script:PendingEnv) {
+        $to = $script:PendingEnv.To
+        if (-not (Test-Path (Split-Path $to -Parent))) { Warn "Reminder-Sanity-Automation was not cloned - its .env from the bundle was not used" }
+        elseif (Test-Path $to) { Info "Reminder-Sanity-Automation\.env exists - kept as is" }
+        else { Copy-Item $script:PendingEnv.From $to; Ok "Reminder-Sanity-Automation\.env copied from the bundle" }
+        Remove-Item $script:PendingEnv.From -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($name in @("Spartan-Dashboard", "Reminder-Sanity-Automation", "Recall-Status-Automation")) {
+        $envFile = Join-Path $Root "$name\.env"
+        $key = Get-EnvValue $envFile "GDRIVE_SERVICE_ACCOUNT_FILE"
+        if (-not $key -or (Test-Path $key)) { continue }
+        $newKey = $script:BundleKeys[(Split-Path $key -Leaf)]
+        if ($newKey -and (Test-Path $newKey)) { Set-EnvValue $envFile "GDRIVE_SERVICE_ACCOUNT_FILE" $newKey; Ok "$name\.env: GDRIVE_SERVICE_ACCOUNT_FILE -> $newKey" }
+    }
+    $dashEnvFile = Join-Path $Dashboard ".env"
+    foreach ($key in @("MAVEN_CMD", "JAVA_HOME")) {
+        $value = Get-EnvValue $dashEnvFile $key
+        if ($value -and -not (Test-Path $value)) { Set-EnvValue $dashEnvFile $key ""; Ok "Spartan-Dashboard\.env: $key cleared (old PC's path; detected automatically)" }
+    }
+}
 
 # --- 3. Python packages -----------------------------------------------------------
 Step "3. Python packages"
@@ -196,6 +297,10 @@ if (Test-Path $dashEnv) {
     foreach ($key in @("DASHBOARD_PASSWORD", "JENKINS_URL", "JENKINS_USER", "JENKINS_API_TOKEN")) {
         if (-not (Get-EnvValue $dashEnv $key)) { Warn "Spartan-Dashboard\.env: $key is empty" }
     }
+    $docsKey = Get-EnvValue $dashEnv "GDRIVE_SERVICE_ACCOUNT_FILE"
+    if (-not $docsKey) { Warn "Spartan-Dashboard\.env: GDRIVE_SERVICE_ACCOUNT_FILE is empty - the Docs & Test Cases tab needs the Google service-account key" }
+    elseif (-not (Test-Path $docsKey)) { Warn "Spartan-Dashboard\.env: GDRIVE_SERVICE_ACCOUNT_FILE points at '$docsKey', which is not on this PC - copy the key there (or fix the path)" }
+    else { Ok "Google service-account key for Docs & Test Cases" }
     $jenkins = Get-EnvValue $dashEnv "JENKINS_URL"
     if ($jenkins) {
         try { $u = [Uri]$jenkins; if (Test-Port $u.Host $u.Port) { Ok "Jenkins reachable at $jenkins" } else { Warn "Jenkins at $jenkins is not reachable - Reminder UI can't run until it is" } } catch { Warn "JENKINS_URL '$jenkins' is not a valid address" }
@@ -224,6 +329,8 @@ else {
 Step "7. Auto-start at logon, and start it now"
 if ($CheckOnly) {
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Ok "Task '$TaskName' exists" } else { Info "Task '$TaskName' would be created" }
+} elseif ($NoAutoStart) {
+    Info "Skipped (-NoAutoStart) - start it by hand: python -u server.py (in $Dashboard)"
 } else {
     New-Item -ItemType Directory -Force (Join-Path $Dashboard "data") | Out-Null
     $launch = "Start-Process -FilePath '$python' -ArgumentList '-u','server.py' -WorkingDirectory '$Dashboard' -WindowStyle Hidden " +
