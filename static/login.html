@@ -56,12 +56,20 @@
                border: 1px solid rgba(255,255,255,.25); color: #fff; border-radius: 8px; padding: 5px 9px; font-size: .78rem; font-weight: 600; line-height: 1; }
   .theme-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
   svg.i { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .pw { position: relative; display: grid; }
+  .pw input { padding-right: 42px; }
+  .pw-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 34px; height: 34px;
+               padding: 0; background: transparent; color: var(--muted); border-radius: 8px; }
+  .pw-toggle:hover { background: var(--soft); color: var(--text); }
+  .pw-toggle svg.i { width: 18px; height: 18px; }
 </style>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></symbol>
 </svg>
 <div class="box">
   <div class="head">
@@ -102,7 +110,12 @@
     <!-- Shared password (fallback when Google isn't configured) -->
     <form id="pwForm" hidden style="display:grid;gap:14px">
       <label>Your name <input id="name" autocomplete="name" maxlength="40" placeholder="Shown in run history"></label>
-      <label>Team password <input id="password" type="password" autocomplete="current-password"></label>
+      <label>Team password
+        <span class="pw">
+          <input id="password" type="password" autocomplete="current-password">
+          <button class="pw-toggle" id="pwToggle" type="button" title="Show password" aria-label="Show password"><svg class="i"><use href="#i-eye"/></svg></button>
+        </span>
+      </label>
       <button type="submit">Sign in</button>
     </form>
   </div>
@@ -168,6 +181,14 @@ $("copyBtn").addEventListener("click", async () => {
 });
 
 // --- password fallback
+$("pwToggle").addEventListener("click", () => {
+  const show = $("password").type === "password";
+  $("password").type = show ? "text" : "password";
+  $("pwToggle").querySelector("use").setAttribute("href", show ? "#i-eye-off" : "#i-eye");
+  $("pwToggle").title = show ? "Hide password" : "Show password";
+  $("pwToggle").setAttribute("aria-label", $("pwToggle").title);
+  $("password").focus();
+});
 $("pwForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const name = $("name").value.trim();
