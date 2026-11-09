@@ -8,6 +8,7 @@ Settings (.env): JENKINS_URL, JENKINS_USER, JENKINS_API_TOKEN.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import time
 import urllib.error
@@ -54,13 +55,26 @@ def _request(url: str, method: str = "GET", data: Optional[bytes] = None):
         return urllib.request.urlopen(req, timeout=TIMEOUT)
     except urllib.error.HTTPError as exc:
         raise JenkinsError(f"Jenkins {method} {url} -> HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise JenkinsError(f"Jenkins not reachable: {exc.reason}") from exc
+    except (OSError, http.client.HTTPException) as exc:
+        # URLError, and also what urlopen doesn't wrap: a timeout or dropped
+        # connection while waiting for the answer.
+        raise JenkinsError(f"Jenkins not reachable: {getattr(exc, 'reason', exc)}") from exc
+
+
+def _read(url: str) -> bytes:
+    """GETs url. Any failure, including one halfway through the answer, is a JenkinsError."""
+    with _request(url) as resp:
+        try:
+            return resp.read()
+        except (OSError, http.client.HTTPException) as exc:
+            raise JenkinsError(f"Jenkins not reachable: reading {url} failed ({exc})") from exc
 
 
 def _json(url: str) -> dict:
-    with _request(url) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        return json.loads(_read(url).decode("utf-8"))
+    except ValueError as exc:
+        raise JenkinsError(f"Jenkins sent an unreadable answer for {url}") from exc
 
 
 def trigger(job: str, params: Optional[dict] = None) -> str:
@@ -99,8 +113,7 @@ def build_info(build_url: str) -> dict:
 
 
 def console_text(build_url: str) -> str:
-    with _request(build_url + "consoleText") as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    return _read(build_url + "consoleText").decode("utf-8", errors="replace")
 
 
 def test_report(build_url: str) -> Optional[dict]:
@@ -126,8 +139,7 @@ def artifact_url(build_url: str, relative_path: str) -> str:
 
 
 def artifact_text(build_url: str, relative_path: str) -> str:
-    with _request(artifact_url(build_url, relative_path)) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    return _read(artifact_url(build_url, relative_path)).decode("utf-8", errors="replace")
 
 
 def stop(build_url: str) -> None:

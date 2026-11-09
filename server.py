@@ -27,6 +27,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -231,25 +232,48 @@ def run_reports(job: dict, started_ts: float | None) -> list[dict]:
     return reports
 
 
-def mark_interrupted_runs() -> None:
+def mark_interrupted_runs() -> list[dict]:
+    """Runs left "running" by the last shutdown. A Jenkins build kept going without
+    the dashboard, so those are returned to be followed again; the rest (local
+    processes, which died with the dashboard) are marked interrupted."""
+    resume = []
     with _lock:
         runs = load_runs()
         changed = False
         for run in runs:
-            if run.get("status") == "running":
-                run.update(status="interrupted", finished_at=run.get("finished_at") or _now())
-                changed = True
+            if run.get("status") != "running":
+                continue
+            job = JOBS.get(run.get("job_id"))
+            if job and job["type"] == "jenkins" and run.get("jenkins_build_url") and job["id"] not in {
+                    r["job_id"] for r in resume}:
+                resume.append(run)
+                continue
+            run.update(status="interrupted", finished_at=run.get("finished_at") or _now())
+            changed = True
         if changed:
             save_runs(runs)
+    return resume
+
+
+def resume_jenkins_runs(runs: list[dict]) -> None:
+    for run in runs:
+        job, stop = JOBS[run["job_id"]], threading.Event()
+        with _lock:
+            _active[job["id"]] = {"run_id": run["id"], "process": None, "stop": stop,
+                                  "build_url": run["jenkins_build_url"]}
+        threading.Thread(target=_follow_jenkins, args=(job, run["id"], stop, run["jenkins_build_url"]),
+                         daemon=True).start()
 
 
 def _finish(job: dict, run_id: str, **fields) -> None:
     with _lock:
-        stopped = _active.get(job["id"], {}).get("stop")
-        if stopped is not None and stopped.is_set():
-            fields["status"] = "stopped"
-        update_run(run_id, finished_at=_now(), **fields)
-        _active.pop(job["id"], None)
+        try:
+            stopped = _active.get(job["id"], {}).get("stop")
+            if stopped is not None and stopped.is_set():
+                fields["status"] = "stopped"
+            update_run(run_id, finished_at=_now(), **fields)
+        finally:
+            _active.pop(job["id"], None)  # never leave the card on "running"
 
 
 def _watch_local(job: dict, run_id: str, process: subprocess.Popen, log_file, started_ts: float) -> None:
@@ -329,42 +353,65 @@ def _jenkins_results(job: dict, build_url: str, info: dict) -> tuple[str, dict, 
     return status, summary, links
 
 
-def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
+JENKINS_POLL_SECONDS = 10
+JENKINS_POLL_RETRIES = 30  # ~5 minutes of failed checks in a row before giving up on a build
+
+
+def _follow_jenkins(job: dict, run_id: str, stop: threading.Event, build_url: str | None = None) -> None:
+    """Triggers the job and follows the build to its result - or, with build_url,
+    follows a build already started (dashboard restarted while it ran)."""
     log = log_path(run_id)
-    build_url = None
     try:
-        with log.open("w", encoding="utf-8") as fh:
-            fh.write(f"Triggering Jenkins job {job['jenkins_job']}...\n")
-        # A disabled job makes Jenkins answer the build POST with a bare HTTP
-        # 409 - say what's actually wrong instead.
-        if jenkins._json(jenkins.job_url(job["jenkins_job"]) + "api/json?tree=buildable").get("buildable") is False:
-            raise jenkins.JenkinsError(
-                f"The Jenkins job \"{job['jenkins_job']}\" is disabled. Enable it in Jenkins "
-                f"({jenkins.job_url(job['jenkins_job'])}), then press Run again.")
-        queue_url = jenkins.trigger(job["jenkins_job"], job.get("jenkins_params"))
-        with log.open("a", encoding="utf-8") as fh:
-            fh.write(f"Queued: {queue_url}\nWaiting for an executor...\n")
-        build_url = jenkins.wait_for_build(queue_url, stop.is_set)
-        if not build_url:
-            _finish(job, run_id, status="stopped", summary=parsers._empty("ERROR", "Cancelled before the build started"))
-            return
-        with _lock:
-            if job["id"] in _active:
-                _active[job["id"]]["build_url"] = build_url
-        update_run(run_id, jenkins_build_url=build_url)
+        if build_url is None:
+            with log.open("w", encoding="utf-8") as fh:
+                fh.write(f"Triggering Jenkins job {job['jenkins_job']}...\n")
+            # A disabled job makes Jenkins answer the build POST with a bare HTTP
+            # 409 - say what's actually wrong instead.
+            if jenkins._json(jenkins.job_url(job["jenkins_job"]) + "api/json?tree=buildable").get("buildable") is False:
+                raise jenkins.JenkinsError(
+                    f"The Jenkins job \"{job['jenkins_job']}\" is disabled. Enable it in Jenkins "
+                    f"({jenkins.job_url(job['jenkins_job'])}), then press Run again.")
+            queue_url = jenkins.trigger(job["jenkins_job"], job.get("jenkins_params"))
+            with log.open("a", encoding="utf-8") as fh:
+                fh.write(f"Queued: {queue_url}\nWaiting for an executor...\n")
+            build_url = jenkins.wait_for_build(queue_url, stop.is_set)
+            if not build_url:
+                _finish(job, run_id, status="stopped", summary=parsers._empty("ERROR", "Cancelled before the build started"))
+                return
+            with _lock:
+                if job["id"] in _active:
+                    _active[job["id"]]["build_url"] = build_url
+            update_run(run_id, jenkins_build_url=build_url)
         if stop.is_set():
             jenkins.stop(build_url)
+        failures = 0
         while True:
-            info = jenkins.build_info(build_url)
-            log.write_text(jenkins.console_text(build_url), encoding="utf-8")
+            # A slow answer or a network blip must not end the run while the build goes on.
+            try:
+                info = jenkins.build_info(build_url)
+            except jenkins.JenkinsError:
+                failures += 1
+                if failures >= JENKINS_POLL_RETRIES:
+                    raise
+                time.sleep(JENKINS_POLL_SECONDS)
+                continue
+            failures = 0
+            try:
+                log.write_text(jenkins.console_text(build_url), encoding="utf-8")
+            except (jenkins.JenkinsError, OSError):
+                pass  # the live log is best-effort; the next check refreshes it
             if not info.get("building"):
                 break
-            time.sleep(10)
+            time.sleep(JENKINS_POLL_SECONDS)
         status, summary, links = _jenkins_results(job, build_url, info)
         _finish(job, run_id, status=status, summary=summary, reports=links, jenkins_build_url=build_url)
     except jenkins.JenkinsError as exc:
         message = str(exc)
-        if "not reachable" in message:
+        if "not reachable" in message and build_url:
+            message = (f"Lost contact with Jenkins for about {round(JENKINS_POLL_RETRIES * JENKINS_POLL_SECONDS / 60)} "
+                       f"minutes while following the build - it may still be running or already finished; "
+                       f"check it in Jenkins. ({exc})")
+        elif "not reachable" in message:
             message = (f"Jenkins at {jenkins._base()} is offline or not accepting connections - "
                        f"check that the Jenkins machine is on, then press Run again. ({exc})")
         elif "HTTP 409" in message:
@@ -373,6 +420,15 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event) -> None:
         with log.open("a", encoding="utf-8") as fh:
             fh.write(f"\n[dashboard] {message}\n")
         _finish(job, run_id, status="error", summary=parsers._empty("ERROR", message),
+                reports=[{"label": "Jenkins build", "url": build_url}] if build_url else [])
+    except Exception as exc:  # noqa: BLE001 - a dashboard bug must never leave the card on "running"
+        try:
+            with log.open("a", encoding="utf-8") as fh:
+                fh.write(f"\n[dashboard] Error while following the build:\n{traceback.format_exc()}")
+        except OSError:
+            pass
+        _finish(job, run_id, status="error",
+                summary=parsers._empty("ERROR", f"Dashboard error while following the build: {exc}"),
                 reports=[{"label": "Jenkins build", "url": build_url}] if build_url else [])
 
 
@@ -740,8 +796,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(HTTPStatus.NOT_FOUND)
         build_url = jenkins.job_url(job["jenkins_job"]) + f"{number}/"
         try:
-            with jenkins._request(jenkins.artifact_url(build_url, rel)) as resp:
-                body = resp.read()
+            body = jenkins._read(jenkins.artifact_url(build_url, rel))
         except jenkins.JenkinsError as exc:
             message = f"Could not get this report from Jenkins: {exc}"
             return self._send(HTTPStatus.BAD_GATEWAY, message.encode("utf-8"), "text/plain; charset=utf-8")
@@ -870,7 +925,7 @@ def main() -> None:
                  "(or DASHBOARD_PASSWORD) in .env")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    mark_interrupted_runs()
+    resume_jenkins_runs(mark_interrupted_runs())
     threading.Thread(target=_jenkins_poller, daemon=True).start()
 
     print(f"Maven: {MAVEN_CMD or 'NOT FOUND'}\nJava:  {JAVA_HOME or 'NOT FOUND (using PATH)'}")
