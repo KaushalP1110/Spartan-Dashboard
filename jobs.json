@@ -1,5 +1,5 @@
 {
-  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md. Jenkins jobs: \"jenkins_job\" is the job's name in Jenkins (\"Folder/Job\" for a job in a folder); \"jenkins_ask_params\": true shows the job's own Jenkins parameters (e.g. a location list) when Run is pressed.",
+  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md. Jenkins jobs: \"jenkins_job\" is the job's name in Jenkins (\"Folder/Job\" for a job in a folder); \"jenkins_ask_params\": true shows the job's own Jenkins parameters when Run is pressed; \"jenkins_form\" writes the Run form out here instead (for lists Jenkins builds with a plugin - e.g. locations per environment).",
   "jobs": [
     {
       "id": "reminder_sanity",
@@ -142,14 +142,40 @@
     {
       "id": "template_setter",
       "name": "Reminder Template Setter",
-      "description": "Sets the reminder templates for the location you pick - runs the AutoTemplate_Setter job on Jenkins.",
+      "description": "Sets the reminder templates for one location - pick Beta or Live, then the location. Runs the Reminder_Template_Setter job on Jenkins.",
       "kind": "Python",
       "type": "jenkins",
       "jenkins_job": "Reminder_Template_Setter",
-      "jenkins_ask_params": true,
       "lock": "adit-reminder-templates",
-      "warning": "Changes the reminder templates of a real location.",
-      "est_minutes": 3
+      "warning": "Changes the reminder templates of a real location. Live is the production environment.",
+      "est_minutes": 3,
+      "jenkins_form": [
+        {
+          "param": "ENVIRONMENT",
+          "label": "Environment",
+          "style": "buttons",
+          "options": [
+            "Live",
+            "Beta"
+          ],
+          "description": "Select environment to run tests"
+        },
+        {
+          "param": "LOCATION",
+          "label": "Location",
+          "depends_on": "ENVIRONMENT",
+          "description": "Select location for {ENVIRONMENT} environment",
+          "options": {
+            "Live": [
+              "Krutik_Live_Telnyx",
+              "Kaushal_Houston_plivo",
+              "Kaushal_OD_Telnyx",
+              "Shreya_OD_Plivo"
+            ],
+            "Beta": []
+          }
+        }
+      ]
     }
   ]
 }

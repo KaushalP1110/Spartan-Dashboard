@@ -261,6 +261,13 @@
   .run-dlg select, .run-dlg input[type=text], .run-dlg textarea { font: inherit; font-weight: 400; color: var(--text); background: var(--bg);
              border: 1px solid var(--border-2); border-radius: 9px; padding: 8px 10px; min-width: 0; }
   .run-dlg select:focus, .run-dlg input:focus, .run-dlg textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .seg span { display: block; text-align: center; padding: 9px 10px; border-radius: 9px; border: 1px solid var(--border-2);
+             background: var(--bg); color: var(--text-2); font-weight: 600; font-size: .86rem; }
+  .seg input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
   .run-dlg .check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
   .run-dlg .rd-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .run-dlg .muted { color: var(--muted); font-size: .82rem; margin: 0; }
@@ -784,6 +791,14 @@ let runDlgJob = null;
 function paramField(p) {
   const id = `rp_${p.name}`, desc = p.description ? `<small>${esc(p.description)}</small>` : "";
   const dflt = p.default == null ? "" : String(p.default);
+  if (p.kind === "choice" && p.style === "buttons") {
+    const first = p.default && p.choices.includes(p.default) ? p.default : p.choices[0];
+    return `<div class="field" role="radiogroup" aria-label="${esc(p.label)}">${esc(p.label)}<div class="seg">${p.choices.map(c =>
+      `<label><input type="radio" name="${esc(id)}" data-param="${esc(p.name)}" value="${esc(c)}" ${c === first ? "checked" : ""}><span>${esc(c)}</span></label>`).join("")}</div>${desc}</div>`;
+  }
+  if (p.kind === "choice" && p.depends_on) {
+    return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}" data-depends="${esc(p.depends_on)}"></select><small data-hint></small></label>`;
+  }
   if (p.kind === "choice") {
     return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}">${p.choices.map(c =>
       `<option value="${esc(c)}" ${c === dflt ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${desc}</label>`;
@@ -818,12 +833,40 @@ async function openRunForm(jobId) {
     $("rdErr").hidden = false;
     return;
   }
+  runDlgFields = body.params;
   $("rdBody").innerHTML = (body.params.length ? body.params.map(paramField).join("") : `<p class="muted">This Jenkins job has no options - it runs as configured in Jenkins.</p>`)
     + (job.warning ? `<div class="note">${icon("info")}<span>${esc(job.warning)}</span></div>` : "");
-  $("rdRun").disabled = false;
+  syncDependents();
   const first = $("rdBody").querySelector("[data-param]");
   if (first) first.focus();
 }
+// A field with "depends_on" lists the values for what is chosen in the field it depends on.
+let runDlgFields = [];
+const paramValue = (name) => {
+  const els = [...$("rdBody").querySelectorAll(`[data-param="${CSS.escape(name)}"]`)];
+  const el = els.find(e => e.type !== "radio" || e.checked);
+  return el ? (el.type === "checkbox" ? el.checked : el.value) : null;
+};
+function syncDependents() {
+  let ready = true;
+  for (const f of runDlgFields.filter(f => f.depends_on)) {
+    const sel = $("rdBody").querySelector(`select[data-param="${CSS.escape(f.name)}"]`);
+    if (!sel) continue;
+    const master = paramValue(f.depends_on), values = (f.choices_by || {})[master] || [];
+    const keep = values.includes(sel.value) ? sel.value : (values.includes(f.default) ? f.default : values[0]);
+    sel.innerHTML = values.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    sel.disabled = !values.length;
+    if (keep !== undefined) sel.value = keep;
+    const hint = sel.parentElement.querySelector("[data-hint]");
+    hint.textContent = values.length ? (f.description || "").replace(/\{(\w+)\}/g, (m, n) => paramValue(n) ?? m)
+      : `No ${f.label.toLowerCase()} is set up for ${master} yet - ask for it to be added in jobs.json`;
+    ready = ready && values.length > 0;
+  }
+  $("rdRun").disabled = !ready;
+  const first = runDlgFields[0], live = first && first.style === "buttons" ? paramValue(first.name) : null;
+  $("rdRun").innerHTML = `${icon("play")}${live ? "Run on " + esc(live) : "Run"}`;
+}
+$("rdBody").addEventListener("change", syncDependents);
 $("rdForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   if (!runDlgJob) return;
@@ -837,8 +880,7 @@ $("rdForm").addEventListener("submit", async (ev) => {
   if (result.ok) { $("runDlg").close(); return; }
   $("rdErr").innerHTML = `${icon("alert")}<span>${esc(result.message || "Could not start the run")}</span>`;
   $("rdErr").hidden = false;
-  $("rdRun").disabled = false;
-  $("rdRun").innerHTML = `${icon("play")}Run`;
+  syncDependents();
 });
 $("rdCancel").addEventListener("click", () => $("runDlg").close());
 $("runDlg").addEventListener("close", () => { runDlgJob = null; });

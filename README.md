@@ -203,6 +203,25 @@ to the job's list in Jenkins shows up in the dashboard without any change here:
 - What was picked is shown on the running card and in the run history, also
   for builds started in Jenkins itself.
 
+**Lists Jenkins builds with a plugin (Active Choices)**, such as the Template
+Setter's location list that changes with Beta/Live, can't be read from Jenkins.
+Write the form out in `jobs.json` instead, with `"jenkins_form"`:
+
+```json
+"jenkins_form": [
+  {"param": "ENVIRONMENT", "label": "Environment", "style": "buttons", "options": ["Live", "Beta"]},
+  {"param": "LOCATION", "label": "Location", "depends_on": "ENVIRONMENT",
+   "description": "Select location for {ENVIRONMENT} environment",
+   "options": {"Live": ["Location_A", "Location_B"], "Beta": ["Location_C"]}}
+]
+```
+
+`param` is the parameter's name in Jenkins, the values are what Jenkins is
+sent, and a field with `depends_on` lists the values for what was chosen
+above it. The server only accepts values from these lists. **A new location
+has to be added here as well as in Jenkins.** An environment with an empty
+list can't be run.
+
 To set it up, put the job's name as Jenkins shows it in `"jenkins_job"`
 (`"Folder/Job"` for a job inside a folder); until then the card says what is
 missing and can't run. It shares the `adit-reminder-templates` lock with
