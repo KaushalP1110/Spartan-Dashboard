@@ -54,6 +54,7 @@
   :root[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
+  html { scrollbar-gutter: stable; }  /* the page doesn't shift sideways when the scrollbar comes and goes */
   body { background: var(--bg); color: var(--text); font: 14px/1.5 Lexend, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
          -webkit-font-smoothing: antialiased; }
   body.drawer-open { overflow: hidden; }
@@ -139,7 +140,7 @@
   .jobs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
   .jobs[data-count="2"], .jobs[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }  /* no lone card on the last row */
   .job { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column;
-         position: relative; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+         position: relative; overflow: hidden; transition: border-color .15s; }
   .job::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--idle-bar); }
   .job.st-pass::before { background: var(--pass-bar); } .job.st-fail::before, .job.st-error::before { background: var(--fail-bar); }
   .job.st-running::before { background: var(--run-bar); }
@@ -237,6 +238,7 @@
   /* When a table has less room than its columns need (a narrow screen, or the details panel),
      each run becomes a small card with a label before every value - nothing is cut off. */
   .qwrap { container-type: inline-size; }
+  .more-wrap { padding: 12px 20px 16px; text-align: center; border-top: 1px solid var(--border); }
   @container (max-width: 980px) {
     .qwrap .stack-lg { display: block; }
     .qwrap .stack-lg thead { display: none; }
@@ -421,6 +423,7 @@
       <thead><tr><th>Automation</th><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th><th>Log</th></tr></thead>
       <tbody id="recent"></tbody>
     </table></div>
+    <div class="more-wrap" id="recentMore" hidden><button class="btn btn-ghost" id="recentMoreBtn" type="button"></button></div>
   </section>
 </main>
 
@@ -741,16 +744,35 @@ function renderDrawer() {
   $("dHistory").innerHTML = sel.history.length ? historyRows(sel.history, false) : `<tr><td colspan="7" class="empty-row">No runs yet.</td></tr>`;
 }
 
+// Rebuilding the page is what makes scrolling stutter, so: only redraw a part whose data changed
+// (or whose times - "3 h ago", the elapsed clock - moved on), and never while the page is being scrolled.
+let lastScroll = 0, renderTimer = null;
+addEventListener("scroll", () => { lastScroll = Date.now(); }, {passive: true});
+const drawn = {};
+function changed(part, ...inputs) {
+  const sig = JSON.stringify(inputs);
+  if (drawn[part] === sig) return false;
+  drawn[part] = sig;
+  return true;
+}
 function render() {
+  if (Date.now() - lastScroll < 250) {  // mid-scroll: try again once it settles
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, 260);
+    return;
+  }
   const local = state.user === "local";
   $("user").hidden = local;
   $("avatar").textContent = initials(state.user);
   $("userName").textContent = state.user;
   $("live").classList.remove("off"); $("liveText").textContent = "Live";
-  renderKpis();
-  renderJobs();
-  renderDrawer();
-  renderRecent();
+  const busy = state.jobs.some(j => j.running);
+  const clock = Math.floor(Date.now() / (busy ? 5000 : 60000));  // moves the on-screen times on without redrawing every poll
+  const filters = [$("fJob").value, $("fStatus").value, $("fSource").value, $("fSearch").value, recentLimit];
+  if (changed("kpis", state.jobs, state.recent, clock)) renderKpis();
+  if (changed("jobs", state.jobs, clock)) renderJobs();
+  if (changed("drawer", openJob, state.selected, state.jobs, clock)) renderDrawer();
+  if (changed("recent", state.recent, filters, clock)) renderRecent();
   $("ver").textContent = state.version ? `Spartan Dashboard · version ${state.version}` : "";
 }
 
@@ -773,13 +795,20 @@ function renderRecent() {
   $("fClear").hidden = !active;
   $("recentCount").textContent = !state.recent.length ? ""
     : active ? `${filtered.length} of last ${state.recent.length} runs` : `Last ${state.recent.length} runs`;
-  $("recent").innerHTML = filtered.length ? historyRows(filtered, true)
+  $("recent").innerHTML = filtered.length ? historyRows(filtered.slice(0, recentLimit), true)
     : `<tr><td colspan="8" class="empty-row">${state.recent.length ? "No runs match these filters." : "No runs yet - pick an automation above and click Run."}</td></tr>`;
+  const left = filtered.length - recentLimit;
+  $("recentMore").hidden = left <= 0;
+  $("recentMoreBtn").textContent = `Show ${Math.min(left, RECENT_STEP)} more (${left} older)`;
 }
-["fJob", "fStatus", "fSource"].forEach(id => $(id).addEventListener("change", () => state && renderRecent()));
-$("fSearch").addEventListener("input", () => state && renderRecent());
+const RECENT_STEP = 25;
+let recentLimit = RECENT_STEP;  // rows drawn; the rest come with "Show more" - a long table is slow to draw and scroll
+$("recentMoreBtn").addEventListener("click", () => { recentLimit += RECENT_STEP; if (state) renderRecent(); });
+["fJob", "fStatus", "fSource"].forEach(id => $(id).addEventListener("change", () => { recentLimit = RECENT_STEP; if (state) renderRecent(); }));
+$("fSearch").addEventListener("input", () => { recentLimit = RECENT_STEP; if (state) renderRecent(); });
 $("fClear").addEventListener("click", () => {
   ["fJob", "fStatus", "fSource", "fSearch"].forEach(id => { $(id).value = ""; });
+  recentLimit = RECENT_STEP;
   if (state) renderRecent();
 });
 
@@ -792,7 +821,17 @@ async function refresh() {
   } catch (e) {
     $("live").classList.add("off"); $("liveText").textContent = "Offline";
   }
+  schedule();
 }
+// Next check: every 3 s while an automation runs (live progress), every 10 s otherwise, none while the tab is hidden.
+let pollTimer = null;
+function schedule() {
+  clearTimeout(pollTimer);
+  if (document.hidden) return;
+  const busy = state && state.jobs.some(j => j.running);
+  pollTimer = setTimeout(refresh, !state ? 5000 : busy ? 3000 : 10000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); else clearTimeout(pollTimer); });
 
 function setOpen(jobId) {
   openJob = jobId;
@@ -1013,7 +1052,6 @@ $("docsChips").addEventListener("click", (ev) => {
 showView();
 
 refresh();
-setInterval(refresh, 3000);
 </script>
 </body>
 </html>

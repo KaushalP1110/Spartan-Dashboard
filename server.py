@@ -675,6 +675,15 @@ def latest_reports(job: dict) -> list[dict]:
     return reports
 
 
+def _slim(run: dict) -> dict:
+    """A run as the Recent activity table needs it - without the per-section results and
+    failure texts, which only the details panel shows (it gets the full runs)."""
+    summary = run.get("summary")
+    if not summary:
+        return run
+    return {**run, "summary": {k: summary.get(k) for k in ("overall_status", "passed", "total", "drive_url", "error")}}
+
+
 def status_payload(selected_job: str | None, user: str) -> dict:
     # Runs of automations no longer in jobs.json stay in runs.json but aren't shown.
     runs = [_display_run(r) for r in load_runs() if r.get("job_id") in JOBS]
@@ -700,7 +709,8 @@ def status_payload(selected_job: str | None, user: str) -> dict:
             "jenkins_last": _jenkins_last.get(job["id"]),
             "pass_streak": [r["status"] for r in job_runs if r["status"] != "running"][:10],
         })
-    payload = {"user": user, "server_time": _now(), "version": VERSION, "jobs": jobs, "recent": runs[:100]}
+    payload = {"user": user, "server_time": _now(), "version": VERSION, "jobs": jobs,
+               "recent": [_slim(r) for r in runs[:100]]}
     if selected_job in JOBS:
         job_runs = [r for r in runs if r["job_id"] == selected_job]
         shown = job_runs[0] if job_runs else None
