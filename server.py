@@ -124,6 +124,8 @@ def job_cwd(job: dict) -> Path:
 def setup_problems(job: dict) -> list[str]:
     """Why a job can't run on this machine yet (empty list = ready)."""
     if job["type"] == "jenkins":
+        if not job.get("jenkins_job"):
+            return [f"Set the Jenkins job name (\"jenkins_job\") for {job['name']} in jobs.json"]
         return [] if jenkins.is_configured() else ["Set JENKINS_URL, JENKINS_USER and JENKINS_API_TOKEN in the dashboard .env"]
     problems = []
     cwd = job_cwd(job)
@@ -342,9 +344,10 @@ def _jenkins_artifacts(job: dict, build_url: str, info: dict, summary: dict) -> 
 
 def _jenkins_results(job: dict, build_url: str, info: dict) -> tuple[str, dict, list[dict]]:
     """(status, summary, report links) of a finished build."""
-    summary = jenkins.summarize(info, jenkins.test_report(build_url))
+    report = jenkins.test_report(build_url)
+    summary = jenkins.summarize(info, report)
     links = [{"label": f"Jenkins build #{info.get('number')}", "url": build_url}]
-    if not job.get("jenkins_artifacts"):
+    if report and not job.get("jenkins_artifacts"):
         links.append({"label": "Test results", "url": build_url + "testReport/"})
     links += [{"label": link["label"], "url": build_url + link["path"]} for link in job.get("jenkins_links", [])]
     summary, artifact_links = _jenkins_artifacts(job, build_url, info, summary)
@@ -357,7 +360,8 @@ JENKINS_POLL_SECONDS = 10
 JENKINS_POLL_RETRIES = 30  # ~5 minutes of failed checks in a row before giving up on a build
 
 
-def _follow_jenkins(job: dict, run_id: str, stop: threading.Event, build_url: str | None = None) -> None:
+def _follow_jenkins(job: dict, run_id: str, stop: threading.Event, build_url: str | None = None,
+                    params: dict | None = None) -> None:
     """Triggers the job and follows the build to its result - or, with build_url,
     follows a build already started (dashboard restarted while it ran)."""
     log = log_path(run_id)
@@ -371,7 +375,7 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event, build_url: st
                 raise jenkins.JenkinsError(
                     f"The Jenkins job \"{job['jenkins_job']}\" is disabled. Enable it in Jenkins "
                     f"({jenkins.job_url(job['jenkins_job'])}), then press Run again.")
-            queue_url = jenkins.trigger(job["jenkins_job"], job.get("jenkins_params"))
+            queue_url = jenkins.trigger(job["jenkins_job"], {**(job.get("jenkins_params") or {}), **(params or {})} or None)
             with log.open("a", encoding="utf-8") as fh:
                 fh.write(f"Queued: {queue_url}\nWaiting for an executor...\n")
             build_url = jenkins.wait_for_build(queue_url, stop.is_set)
@@ -432,13 +436,60 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event, build_url: st
                 reports=[{"label": "Jenkins build", "url": build_url}] if build_url else [])
 
 
-def start_run(job_id: str, user: str) -> tuple[bool, str]:
+_param_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def job_parameters(job: dict, fresh: bool = False) -> list[dict]:
+    """The Jenkins job's own build parameters, for the Run form ("jenkins_ask_params")."""
+    cached = _param_cache.get(job["id"])
+    if cached and not fresh and time.time() - cached[0] < 60:
+        return cached[1]
+    params = [{**p, "label": p["name"].replace("_", " ").strip().title()} for p in jenkins.parameters(job["jenkins_job"])]
+    _param_cache[job["id"]] = (time.time(), params)
+    return params
+
+
+def check_params(job: dict, given) -> tuple[dict | None, str]:
+    """(values to send to Jenkins, error). Only the job's own parameters, a listed
+    value for a choice, and the Jenkins default for anything not given."""
+    given = given if isinstance(given, dict) else {}
+    try:
+        defs = job_parameters(job, fresh=True)
+    except jenkins.JenkinsError as exc:
+        return None, f"Could not read the parameters of the Jenkins job: {exc}"
+    known = {d["name"]: d for d in defs}
+    unknown = sorted(k for k in given if k not in known)
+    if unknown:
+        return None, "The Jenkins job has no parameter " + ", ".join(unknown) + " - reload the page and try again"
+    values = {}
+    for d in defs:
+        if d["kind"] == "unsupported":
+            continue  # passwords, files, plugin types: Jenkins uses its default
+        value = given.get(d["name"], d["default"])
+        if d["kind"] == "bool":
+            values[d["name"]] = "true" if value in (True, "true", "on", "1", 1) else "false"
+            continue
+        value = "" if value is None else str(value)
+        if len(value) > 2000 or (d["kind"] != "text" and ("\n" in value or "\r" in value)):
+            return None, f"{d['label']}: that value is not allowed"
+        if d["kind"] == "choice" and value not in d["choices"]:
+            return None, f"{d['label']}: pick one of the values Jenkins lists"
+        values[d["name"]] = value
+    return values, ""
+
+
+def start_run(job_id: str, user: str, params=None) -> tuple[bool, str]:
     job = JOBS.get(job_id)
     if not job:
         return False, "Unknown automation"
     problems = setup_problems(job)
     if problems:
         return False, "Not set up: " + "; ".join(problems)
+    chosen = None
+    if job["type"] == "jenkins" and job.get("jenkins_ask_params"):
+        chosen, error = check_params(job, params)  # asks Jenkins - outside the lock
+        if chosen is None:
+            return False, error
     with _lock:
         if job_id in _active:
             return False, f"{job['name']} is already running"
@@ -453,6 +504,8 @@ def start_run(job_id: str, user: str) -> tuple[bool, str]:
         record = {"id": run_id, "job_id": job_id, "job_name": job["name"], "status": "running",
                   "started_at": _now(), "finished_at": None, "started_by": user,
                   "exit_code": None, "summary": None, "reports": []}
+        if chosen:
+            record["params"] = chosen
         stop = threading.Event()
 
         if job["type"] == "jenkins":
@@ -460,7 +513,7 @@ def start_run(job_id: str, user: str) -> tuple[bool, str]:
             runs.insert(0, record)
             save_runs(runs)
             _active[job_id] = {"run_id": run_id, "process": None, "stop": stop, "build_url": None}
-            threading.Thread(target=_follow_jenkins, args=(job, run_id, stop), daemon=True).start()
+            threading.Thread(target=_follow_jenkins, args=(job, run_id, stop, None, chosen), daemon=True).start()
             return True, run_id
 
         log_file = open(log_path(run_id), "w", encoding="utf-8", buffering=1)
@@ -554,6 +607,8 @@ def _import_jenkins_builds(job: dict) -> None:
                   "started_by": "Jenkins schedule" if build["started_by"] == "timer" else f"{build['started_by']} (Jenkins)",
                   "exit_code": None,
                   "summary": summary, "reports": links, "jenkins_build_url": url, "source": "jenkins"}
+        if job.get("jenkins_ask_params") and build.get("params"):
+            record["params"] = build["params"]
         with _lock:
             runs = load_runs()
             if any(r.get("jenkins_build_url") == url for r in runs):
@@ -606,6 +661,7 @@ def status_payload(selected_job: str | None, user: str) -> dict:
             "id": job["id"], "name": job["name"], "description": job.get("description", ""),
             "kind": job.get("kind", ""), "type": job["type"], "warning": job.get("warning"),
             "est_minutes": job.get("est_minutes"), "lock": job.get("lock"),
+            "ask_params": job["type"] == "jenkins" and bool(job.get("jenkins_ask_params")),
             "links": job.get("links", []),
             "problems": setup_problems(job),
             "steps": [s[0] for s in job.get("steps", [])],
@@ -856,6 +912,16 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/status":
             job = (parse_qs(url.query).get("job") or [None])[0]
             return self._json(status_payload(job, user))
+        parts = route.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "params":
+            job = JOBS.get(parts[2])
+            if not job or job["type"] != "jenkins" or not job.get("jenkins_ask_params") or setup_problems(job):
+                return self._json({"ok": False, "message": "Not available"}, HTTPStatus.NOT_FOUND)
+            try:
+                return self._json({"ok": True, "params": job_parameters(job)})
+            except jenkins.JenkinsError as exc:
+                return self._json({"ok": False, "message": f"Could not read the Jenkins job's parameters: {exc}"},
+                                  HTTPStatus.BAD_GATEWAY)
         if route == "/api/docs":
             refresh = (parse_qs(url.query).get("refresh") or [""])[0] == "1"
             return self._json(gdrive_docs.listing(DOCS_FILE, refresh=refresh))
@@ -907,8 +973,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": False, "message": "Login required"}, HTTPStatus.UNAUTHORIZED)
         parts = route.strip("/").split("/")
         if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] in ("run", "stop"):
-            action = start_run if parts[3] == "run" else stop_run
-            ok, message = action(parts[2], user)
+            if parts[3] == "run":
+                body = self._body()
+                ok, message = start_run(parts[2], user, body.get("params") if isinstance(body, dict) else None)
+            else:
+                ok, message = stop_run(parts[2], user)
             return self._json({"ok": ok, "message": message}, HTTPStatus.OK if ok else HTTPStatus.CONFLICT)
         self.send_error(HTTPStatus.NOT_FOUND)
 

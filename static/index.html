@@ -251,6 +251,20 @@
   .act-filters .search input { padding: 7px 0; font-size: .82rem; }
 
   /* --- detail drawer --- */
+  .run-dlg { border: 0; border-radius: 14px; padding: 0; width: min(460px, calc(100% - 32px)); background: var(--surface); color: var(--text);
+             box-shadow: var(--shadow-lg); }
+  .run-dlg::backdrop { background: rgba(15,23,42,.45); }
+  .run-dlg form { display: grid; gap: 14px; padding: 20px 22px; }
+  .run-dlg h2 { margin: 0; font-size: 1.05rem; }
+  .run-dlg .field { display: grid; gap: 5px; font-size: .8rem; font-weight: 600; color: var(--text-2); }
+  .run-dlg .field small { font-weight: 400; color: var(--muted); }
+  .run-dlg select, .run-dlg input[type=text], .run-dlg textarea { font: inherit; font-weight: 400; color: var(--text); background: var(--bg);
+             border: 1px solid var(--border-2); border-radius: 9px; padding: 8px 10px; min-width: 0; }
+  .run-dlg select:focus, .run-dlg input:focus, .run-dlg textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .run-dlg .check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+  .run-dlg .rd-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .run-dlg .muted { color: var(--muted); font-size: .82rem; margin: 0; }
+  .params { color: var(--text-2); font-size: .76rem; }
   .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s; }
   .scrim.show { opacity: 1; pointer-events: auto; }
   .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100%); background: var(--bg); z-index: 50; box-shadow: var(--shadow-lg);
@@ -389,6 +403,15 @@
   </section>
 </main>
 
+<dialog class="run-dlg" id="runDlg" aria-labelledby="rdTitle">
+  <form id="rdForm" novalidate>
+    <h2 id="rdTitle"></h2>
+    <div id="rdBody" style="display:grid;gap:12px"></div>
+    <div class="alert error" id="rdErr" role="alert" hidden></div>
+    <div class="rd-actions"><button type="button" class="btn btn-ghost" id="rdCancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="rdRun"></button></div>
+  </form>
+</dialog>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="dTitle">
   <div class="dr-head">
@@ -490,7 +513,7 @@ function runButton(job, small) {
   if (job.running) return `<button class="btn btn-danger" data-stop="${job.id}">${icon("stop")}Stop</button>`;
   const blocker = lockBlocker(job);
   const why = job.problems.length ? "Finish setup first" : blocker ? `Wait for ${blocker.name} - both change the same reminder templates` : "";
-  return `<button class="btn btn-primary" data-run="${job.id}" ${why ? "disabled" : ""} title="${esc(why)}">${icon("play")}Run</button>`;
+  return `<button class="btn btn-primary" ${job.ask_params ? "data-ask" : "data-run"}="${job.id}" ${why ? "disabled" : ""} title="${esc(why)}">${icon("play")}Run</button>`;
 }
 
 // --- KPI tiles
@@ -536,6 +559,10 @@ function statsHtml(job) {
     <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">${run ? dur(run.started_at, run.finished_at) : job.est_minutes ? "~" + job.est_minutes + " min" : "-"}</div></div>
   </div>`;
 }
+const paramLabel = (name) => name.replace(/_/g, " ").trim().replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+function paramsText(params) {
+  return Object.entries(params || {}).map(([k, v]) => `${paramLabel(k)}: ${v}`).join(" · ");
+}
 function runningHtml(job) {
   const r = job.running;
   const elapsedMin = (Date.now() - new Date(r.started_at)) / 60000;
@@ -543,7 +570,8 @@ function runningHtml(job) {
   const step = r.step != null && job.steps.length ? `Step ${r.step + 1}/${job.steps.length} · ${job.steps[r.step]}` : "In progress";
   return `<div class="running-box"><div class="running-top"><b>${esc(step)}</b><span>${dur(r.started_at)}</span></div>
     <div class="progress" title="Estimate based on ~${job.est_minutes} min"><span style="width:${pct}%"></span></div>
-    <div class="job-meta" style="margin-top:6px">Started by ${esc(r.started_by)} · usually ~${job.est_minutes} min</div></div>`;
+    <div class="job-meta" style="margin-top:6px">Started by ${esc(r.started_by)} · usually ~${job.est_minutes} min</div>
+    ${r.params ? `<div class="params">${esc(paramsText(r.params))}</div>` : ""}</div>`;
 }
 function historyHtml(job) {
   const runs = job.pass_streak.slice(0, 10).reverse();
@@ -608,7 +636,7 @@ function historyRows(runs, withJob) {
       <td class="num">${c ? `${c.passed}/${c.total}` : "-"}</td>
       <td title="${esc(new Date(r.started_at).toLocaleString())}">${fmtTime(r.started_at)}</td>
       <td class="num">${dur(r.started_at, r.finished_at)}</td>
-      <td>${esc(r.started_by || "-")}</td>
+      <td>${esc(r.started_by || "-")}${r.params ? `<div class="params">${esc(paramsText(r.params))}</div>` : ""}</td>
       <td>${rowLinks(reportFiles(r))}</td>
       <td>${rowLinks(runLogs(r))}</td></tr>`;
   }).join("");
@@ -738,18 +766,88 @@ function setOpen(jobId) {
   refresh();
 }
 
-async function action(jobId, verb) {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/${verb}`, {method: "POST"});
-  if (res.status === 401) { location.href = "/login"; return; }
-  const body = await res.json().catch(() => ({}));
+async function action(jobId, verb, params) {
+  const init = {method: "POST"};
+  if (params) { init.headers = {"Content-Type": "application/json"}; init.body = JSON.stringify({params}); }
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/${verb}`, init).catch(() => null);
+  if (res && res.status === 401) { location.href = "/login"; return {ok: false}; }
+  const body = res ? await res.json().catch(() => ({})) : {message: "Can't reach the dashboard"};
   const name = (state.jobs.find(j => j.id === jobId) || {}).name || jobId;
-  toast(res.ok ? (verb === "run" ? `${name} started` : `Stopping ${name}…`) : (body.message || "Something went wrong"));
+  const ok = !!(res && res.ok);
+  toast(ok ? (verb === "run" ? `${name} started` : `Stopping ${name}…`) : (body.message || "Something went wrong"));
   refresh();
+  return {ok, message: body.message};
 }
+
+// --- Run form for Jenkins jobs with parameters: the fields come from the Jenkins job itself.
+let runDlgJob = null;
+function paramField(p) {
+  const id = `rp_${p.name}`, desc = p.description ? `<small>${esc(p.description)}</small>` : "";
+  const dflt = p.default == null ? "" : String(p.default);
+  if (p.kind === "choice") {
+    return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}">${p.choices.map(c =>
+      `<option value="${esc(c)}" ${c === dflt ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${desc}</label>`;
+  }
+  if (p.kind === "bool") {
+    return `<div class="field"><label class="check"><input type="checkbox" data-param="${esc(p.name)}" ${p.default === true || dflt === "true" ? "checked" : ""}>${esc(p.label)}</label>${desc}</div>`;
+  }
+  if (p.kind === "text") {
+    return `<label class="field">${esc(p.label)}<textarea rows="3" data-param="${esc(p.name)}">${esc(dflt)}</textarea>${desc}</label>`;
+  }
+  if (p.kind === "string") {
+    return `<label class="field">${esc(p.label)}<input type="text" data-param="${esc(p.name)}" value="${esc(dflt)}" autocomplete="off">${desc}</label>`;
+  }
+  return `<p class="muted">${esc(p.label)}: set in Jenkins (this kind of parameter isn't shown here, so Jenkins uses its default)</p>`;
+}
+async function openRunForm(jobId) {
+  const job = state.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  runDlgJob = job;
+  $("rdTitle").textContent = `Run ${job.name}`;
+  $("rdErr").hidden = true;
+  $("rdRun").innerHTML = `${icon("play")}Run`;
+  $("rdRun").disabled = true;
+  $("rdBody").innerHTML = `<p class="muted">Reading the job's options from Jenkins…</p>`;
+  if (!$("runDlg").open) $("runDlg").showModal();
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/params`).catch(() => null);
+  const body = res ? await res.json().catch(() => ({})) : {};
+  if (runDlgJob !== job) return;
+  if (!res || !res.ok) {
+    $("rdBody").innerHTML = "";
+    $("rdErr").innerHTML = `${icon("alert")}<span>${esc(body.message || "Can't reach the dashboard")}</span>`;
+    $("rdErr").hidden = false;
+    return;
+  }
+  $("rdBody").innerHTML = (body.params.length ? body.params.map(paramField).join("") : `<p class="muted">This Jenkins job has no options - it runs as configured in Jenkins.</p>`)
+    + (job.warning ? `<div class="note">${icon("info")}<span>${esc(job.warning)}</span></div>` : "");
+  $("rdRun").disabled = false;
+  const first = $("rdBody").querySelector("[data-param]");
+  if (first) first.focus();
+}
+$("rdForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!runDlgJob) return;
+  const params = {};
+  $("rdBody").querySelectorAll("[data-param]").forEach(el => {
+    params[el.dataset.param] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  $("rdRun").disabled = true;
+  $("rdRun").textContent = "Starting…";
+  const result = await action(runDlgJob.id, "run", params);
+  if (result.ok) { $("runDlg").close(); return; }
+  $("rdErr").innerHTML = `${icon("alert")}<span>${esc(result.message || "Could not start the run")}</span>`;
+  $("rdErr").hidden = false;
+  $("rdRun").disabled = false;
+  $("rdRun").innerHTML = `${icon("play")}Run`;
+});
+$("rdCancel").addEventListener("click", () => $("runDlg").close());
+$("runDlg").addEventListener("close", () => { runDlgJob = null; });
 
 document.addEventListener("click", (ev) => {
   const run = ev.target.closest("[data-run]"), stop = ev.target.closest("[data-stop]"), open = ev.target.closest("[data-open]");
-  if (run) action(run.dataset.run, "run");
+  const ask = ev.target.closest("[data-ask]");
+  if (ask) openRunForm(ask.dataset.ask);
+  else if (run) action(run.dataset.run, "run");
   else if (stop) {
     if (confirm("Stop this run now?\n\nAnything it already set up (appointments, recalls) will NOT be cleaned up.")) action(stop.dataset.stop, "stop");
   } else if (open) { ev.preventDefault(); setOpen(open.dataset.open); }

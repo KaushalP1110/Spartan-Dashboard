@@ -1,5 +1,5 @@
 {
-  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md.",
+  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md. Jenkins jobs: \"jenkins_job\" is the job's name in Jenkins (\"Folder/Job\" for a job in a folder); \"jenkins_ask_params\": true shows the job's own Jenkins parameters (e.g. a location list) when Run is pressed.",
   "jobs": [
     {
       "id": "reminder_sanity",
@@ -53,7 +53,8 @@
         ]
       ],
       "warning": "Books real appointments, repoints location-wide reminder templates and sends a real SMS.",
-      "est_minutes": 45
+      "est_minutes": 45,
+      "lock": "adit-reminder-templates"
     },
     {
       "id": "recall_status",
@@ -137,6 +138,18 @@
       ],
       "warning": "Creates and deletes reminder templates on real locations and posts the summary to Google Chat.",
       "est_minutes": 10
+    },
+    {
+      "id": "template_setter",
+      "name": "Reminder Template Setter",
+      "description": "Sets the reminder templates for the location you pick - runs the AutoTemplate_Setter job on Jenkins.",
+      "kind": "Python",
+      "type": "jenkins",
+      "jenkins_job": "",
+      "jenkins_ask_params": true,
+      "lock": "adit-reminder-templates",
+      "warning": "Changes the reminder templates of a real location.",
+      "est_minutes": 3
     }
   ]
 }

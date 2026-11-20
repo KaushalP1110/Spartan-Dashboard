@@ -10,6 +10,7 @@ the failures that need attention, and links to every report - all in one place.
 | Recall Status | `python runners/run_recall_status_check.py` | `recall_status_results_*.json` (+ HTML/PDF) |
 | Cron Reporting | `mvn -B test` | `testng-results.xml` (+ Excel export) |
 | Reminder UI | Jenkins job `Reminder UI Automation Playwright` | the build's archived `test-reports/<run>/report.txt` (+ Playwright HTML report) |
+| Reminder Template Setter | Jenkins job (AutoTemplate_Setter) for the location you pick | the Jenkins build result |
 
 Each local automation runs **in its own project folder exactly as if you ran
 it by hand**, so Jenkins/CLI runs and dashboard runs behave the same.
@@ -187,6 +188,26 @@ To add a folder or a single Doc/Sheet:
 
 `GDRIVE_SERVICE_ACCOUNT_FILE` in the dashboard `.env` points at the
 service-account JSON key (the same account the automations upload reports with).
+
+## Jenkins jobs with options (Reminder Template Setter)
+
+A Jenkins card with `"jenkins_ask_params": true` in `jobs.json` asks for the
+job's own Jenkins parameters when **Run** is pressed - e.g. the location for
+the Template Setter. The form is read live from Jenkins, so a location added
+to the job's list in Jenkins shows up in the dashboard without any change here:
+
+- Choice -> dropdown (Jenkins' list, Jenkins' default selected), String/Text ->
+  text box, Boolean -> checkbox. Other kinds (passwords, files, plugin types
+  such as Active Choices) aren't asked for: Jenkins uses their default.
+- Only the job's own parameters and, for a choice, a listed value are sent.
+- What was picked is shown on the running card and in the run history, also
+  for builds started in Jenkins itself.
+
+To set it up, put the job's name as Jenkins shows it in `"jenkins_job"`
+(`"Folder/Job"` for a job inside a folder); until then the card says what is
+missing and can't run. It shares the `adit-reminder-templates` lock with
+Reminder Sanity, so the dashboard never runs both at once (a build started in
+Jenkins itself isn't blocked).
 
 ## How it behaves
 
