@@ -145,7 +145,7 @@
       "description": "Sets the reminder templates for the location you pick - runs the AutoTemplate_Setter job on Jenkins.",
       "kind": "Python",
       "type": "jenkins",
-      "jenkins_job": "",
+      "jenkins_job": "Reminder_Template_Setter",
       "jenkins_ask_params": true,
       "lock": "adit-reminder-templates",
       "warning": "Changes the reminder templates of a real location.",
