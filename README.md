@@ -191,21 +191,9 @@ service-account JSON key (the same account the automations upload reports with).
 
 ## Jenkins jobs with options (Reminder Template Setter)
 
-A Jenkins card with `"jenkins_ask_params": true` in `jobs.json` asks for the
-job's own Jenkins parameters when **Run** is pressed - e.g. the location for
-the Template Setter. The form is read live from Jenkins, so a location added
-to the job's list in Jenkins shows up in the dashboard without any change here:
-
-- Choice -> dropdown (Jenkins' list, Jenkins' default selected), String/Text ->
-  text box, Boolean -> checkbox. Other kinds (passwords, files, plugin types
-  such as Active Choices) aren't asked for: Jenkins uses their default.
-- Only the job's own parameters and, for a choice, a listed value are sent.
-- What was picked is shown on the running card and in the run history, also
-  for builds started in Jenkins itself.
-
-**Lists Jenkins builds with a plugin (Active Choices)**, such as the Template
-Setter's location list that changes with Beta/Live, can't be read from Jenkins.
-Write the form out in `jobs.json` instead, with `"jenkins_form"`:
+A Jenkins card with a `"jenkins_form"` in `jobs.json` asks for its options when
+**Run** is pressed - the Template Setter asks for the environment (Beta or Live)
+and then a location from that environment's list:
 
 ```json
 "jenkins_form": [
@@ -216,17 +204,22 @@ Write the form out in `jobs.json` instead, with `"jenkins_form"`:
 ]
 ```
 
-`param` is the parameter's name in Jenkins, the values are what Jenkins is
-sent, and a field with `depends_on` lists the values for what was chosen
-above it. The server only accepts values from these lists. **A new location
-has to be added here as well as in Jenkins.** An environment with an empty
-list can't be run.
+- `param` is the parameter's name in Jenkins and the values are what Jenkins is
+  sent. `"style": "buttons"` shows a choice as buttons, otherwise a dropdown.
+- A field with `depends_on` lists the values for what was chosen above it.
+- The server only accepts values from these lists, and what was picked is shown
+  on the running card and in the run history (also for builds started in Jenkins).
+- **A new location has to be added here as well as in Jenkins** (Jenkins builds its
+  list with a plugin, which the dashboard can't read). An environment with an empty
+  list can't be run.
+- `"jenkins_job"` is the job's name as Jenkins shows it (`"Folder/Job"` for a job
+  inside a folder); until it is set the card says what is missing and can't run.
+- The card shares the `adit-reminder-templates` lock with Reminder Sanity, so the
+  dashboard never runs both at once (a build started in Jenkins itself isn't blocked).
 
-To set it up, put the job's name as Jenkins shows it in `"jenkins_job"`
-(`"Folder/Job"` for a job inside a folder); until then the card says what is
-missing and can't run. It shares the `adit-reminder-templates` lock with
-Reminder Sanity, so the dashboard never runs both at once (a build started in
-Jenkins itself isn't blocked).
+**Which version is running?** The bottom of the page shows the commit the
+dashboard was started on. After `git pull`, restart the dashboard - until then it
+keeps showing (and running) the old version.
 
 ## How it behaves
 

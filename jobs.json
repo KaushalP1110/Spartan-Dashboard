@@ -1,5 +1,5 @@
 {
-  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md. Jenkins jobs: \"jenkins_job\" is the job's name in Jenkins (\"Folder/Job\" for a job in a folder); \"jenkins_ask_params\": true shows the job's own Jenkins parameters when Run is pressed; \"jenkins_form\" writes the Run form out here instead (for lists Jenkins builds with a plugin - e.g. locations per environment).",
+  "_help": "One entry per automation. Relative 'cwd' paths are relative to this folder. {python} = the Python running the dashboard, {mvn} = MAVEN_CMD from .env (auto-detected). 'lock': jobs sharing a lock never run at the same time. See README.md. Jenkins jobs: \"jenkins_job\" is the job's name in Jenkins (\"Folder/Job\" for a job in a folder); \"jenkins_form\" lists what Run asks for (see README, \"Jenkins jobs with options\").",
   "jobs": [
     {
       "id": "reminder_sanity",

@@ -163,6 +163,28 @@ _lock = threading.RLock()
 _active: dict[str, dict] = {}  # job_id -> {"run_id", "process", "stop", "build_url"}
 
 
+def _version() -> str:
+    """The commit this copy of the dashboard is on, read from .git (no git needed) -
+    shown at the bottom of the page so you can see which code is running."""
+    try:
+        git = ROOT / ".git"
+        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        if head.startswith("ref: "):
+            ref = head[5:]
+            ref_file = git / ref
+            if ref_file.is_file():
+                head = ref_file.read_text(encoding="utf-8").strip()
+            else:
+                head = next((line.split()[0] for line in (git / "packed-refs").read_text(encoding="utf-8").splitlines()
+                             if line.endswith(" " + ref)), "")
+        return head[:7]
+    except (OSError, IndexError):
+        return ""
+
+
+VERSION = _version()  # read once, at start - a stale number means the dashboard wasn't restarted after an update
+
+
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -436,21 +458,19 @@ def _follow_jenkins(job: dict, run_id: str, stop: threading.Event, build_url: st
                 reports=[{"label": "Jenkins build", "url": build_url}] if build_url else [])
 
 
-_param_cache: dict[str, tuple[float, list[dict]]] = {}
-
-
 def asks_params(job: dict) -> bool:
-    return job["type"] == "jenkins" and bool(job.get("jenkins_ask_params") or job.get("jenkins_form"))
+    return job["type"] == "jenkins" and bool(job.get("jenkins_form"))
 
 
 def form_fields(job: dict) -> list[dict]:
-    """The Run form written out in jobs.json ("jenkins_form"), for jobs whose Jenkins
-    options can't be read from Jenkins - e.g. an Active Choices location list that
-    changes with the environment. Each field is {"param", "label", "options"}; with
-    "depends_on": <other param>, "options" is {<that param's value>: [values]}."""
+    """The Run form written out in jobs.json ("jenkins_form"). Jenkins builds some
+    option lists with a plugin (e.g. a location list that changes with the
+    environment), which can't be read from Jenkins, so they are listed here. Each
+    field is {"param", "label", "options"}; with "depends_on": <other param>,
+    "options" is {<that param's value>: [values]}."""
     fields = []
     for f in job.get("jenkins_form") or []:
-        field = {"name": f["param"], "label": f.get("label") or f["param"].replace("_", " ").title(), "kind": "choice",
+        field = {"name": f["param"], "label": f.get("label") or f["param"].replace("_", " ").title(),
                  "description": f.get("description", ""), "style": f.get("style", "select"),
                  "depends_on": f.get("depends_on"), "default": f.get("default")}
         if field["depends_on"]:
@@ -460,50 +480,6 @@ def form_fields(job: dict) -> list[dict]:
             field["choices"] = [str(v) for v in f["options"]]
         fields.append(field)
     return fields
-
-
-def job_parameters(job: dict, fresh: bool = False) -> list[dict]:
-    """The Run form's fields: "jenkins_form" in jobs.json if given, else the Jenkins
-    job's own build parameters ("jenkins_ask_params")."""
-    if job.get("jenkins_form"):
-        return form_fields(job)
-    cached = _param_cache.get(job["id"])
-    if cached and not fresh and time.time() - cached[0] < 60:
-        return cached[1]
-    params = [{**p, "label": p["name"].replace("_", " ").strip().title()} for p in jenkins.parameters(job["jenkins_job"])]
-    _param_cache[job["id"]] = (time.time(), params)
-    return params
-
-
-def check_params(job: dict, given) -> tuple[dict | None, str]:
-    """(values to send to Jenkins, error). Only the job's own parameters, a listed
-    value for a choice, and the Jenkins default for anything not given."""
-    given = given if isinstance(given, dict) else {}
-    if job.get("jenkins_form"):
-        return check_form(job, given)
-    try:
-        defs = job_parameters(job, fresh=True)
-    except jenkins.JenkinsError as exc:
-        return None, f"Could not read the parameters of the Jenkins job: {exc}"
-    known = {d["name"]: d for d in defs}
-    unknown = sorted(k for k in given if k not in known)
-    if unknown:
-        return None, "The Jenkins job has no parameter " + ", ".join(unknown) + " - reload the page and try again"
-    values = {}
-    for d in defs:
-        if d["kind"] == "unsupported":
-            continue  # passwords, files, plugin types: Jenkins uses its default
-        value = given.get(d["name"], d["default"])
-        if d["kind"] == "bool":
-            values[d["name"]] = "true" if value in (True, "true", "on", "1", 1) else "false"
-            continue
-        value = "" if value is None else str(value)
-        if len(value) > 2000 or (d["kind"] != "text" and ("\n" in value or "\r" in value)):
-            return None, f"{d['label']}: that value is not allowed"
-        if d["kind"] == "choice" and value not in d["choices"]:
-            return None, f"{d['label']}: pick one of the values Jenkins lists"
-        values[d["name"]] = value
-    return values, ""
 
 
 def check_form(job: dict, given: dict) -> tuple[dict | None, str]:
@@ -540,7 +516,7 @@ def start_run(job_id: str, user: str, params=None) -> tuple[bool, str]:
         return False, "Not set up: " + "; ".join(problems)
     chosen = None
     if asks_params(job):
-        chosen, error = check_params(job, params)  # asks Jenkins - outside the lock
+        chosen, error = check_form(job, params if isinstance(params, dict) else {})
         if chosen is None:
             return False, error
     with _lock:
@@ -724,7 +700,7 @@ def status_payload(selected_job: str | None, user: str) -> dict:
             "jenkins_last": _jenkins_last.get(job["id"]),
             "pass_streak": [r["status"] for r in job_runs if r["status"] != "running"][:10],
         })
-    payload = {"user": user, "server_time": _now(), "jobs": jobs, "recent": runs[:100]}
+    payload = {"user": user, "server_time": _now(), "version": VERSION, "jobs": jobs, "recent": runs[:100]}
     if selected_job in JOBS:
         job_runs = [r for r in runs if r["job_id"] == selected_job]
         shown = job_runs[0] if job_runs else None
@@ -970,11 +946,7 @@ class Handler(BaseHTTPRequestHandler):
             job = JOBS.get(parts[2])
             if not job or not asks_params(job) or setup_problems(job):
                 return self._json({"ok": False, "message": "Not available"}, HTTPStatus.NOT_FOUND)
-            try:
-                return self._json({"ok": True, "params": job_parameters(job)})
-            except jenkins.JenkinsError as exc:
-                return self._json({"ok": False, "message": f"Could not read the Jenkins job's parameters: {exc}"},
-                                  HTTPStatus.BAD_GATEWAY)
+            return self._json({"ok": True, "params": form_fields(job)})
         if route == "/api/docs":
             refresh = (parse_qs(url.query).get("refresh") or [""])[0] == "1"
             return self._json(gdrive_docs.listing(DOCS_FILE, refresh=refresh))

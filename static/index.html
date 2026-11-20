@@ -239,6 +239,7 @@
   .job-cell .kind-ic.sticker img { width: 17px; height: 17px; }
   .row-links { display: flex; flex-wrap: wrap; gap: 6px; }
   .muted-dash { color: var(--muted); }
+  .ver { text-align: center; color: var(--muted); font-size: .72rem; padding: 4px 16px 18px; }
   .row-links .link { font-size: .72rem; padding: 3px 8px; gap: 4px; border-radius: 6px; transition: border-color .15s, color .15s, background .15s; }
   .row-links .link svg.i { width: 12px; height: 12px; }
   .row-links .link:hover, .links .link:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -440,6 +441,7 @@
       <tbody id="dHistory"></tbody></table></div></div>
   </div>
 </aside>
+<footer class="ver" id="ver"></footer>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -722,6 +724,7 @@ function render() {
   renderJobs();
   renderDrawer();
   renderRecent();
+  $("ver").textContent = state.version ? `Spartan Dashboard · version ${state.version}` : "";
 }
 
 // --- Recent activity filters
@@ -790,29 +793,16 @@ async function action(jobId, verb, params) {
 let runDlgJob = null;
 function paramField(p) {
   const id = `rp_${p.name}`, desc = p.description ? `<small>${esc(p.description)}</small>` : "";
-  const dflt = p.default == null ? "" : String(p.default);
-  if (p.kind === "choice" && p.style === "buttons") {
+  if (p.style === "buttons") {
     const first = p.default && p.choices.includes(p.default) ? p.default : p.choices[0];
     return `<div class="field" role="radiogroup" aria-label="${esc(p.label)}">${esc(p.label)}<div class="seg">${p.choices.map(c =>
       `<label><input type="radio" name="${esc(id)}" data-param="${esc(p.name)}" value="${esc(c)}" ${c === first ? "checked" : ""}><span>${esc(c)}</span></label>`).join("")}</div>${desc}</div>`;
   }
-  if (p.kind === "choice" && p.depends_on) {
-    return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}" data-depends="${esc(p.depends_on)}"></select><small data-hint></small></label>`;
+  if (p.depends_on) {  // its list is filled by syncDependents() from what is chosen above it
+    return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}"></select><small data-hint></small></label>`;
   }
-  if (p.kind === "choice") {
-    return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}">${p.choices.map(c =>
-      `<option value="${esc(c)}" ${c === dflt ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${desc}</label>`;
-  }
-  if (p.kind === "bool") {
-    return `<div class="field"><label class="check"><input type="checkbox" data-param="${esc(p.name)}" ${p.default === true || dflt === "true" ? "checked" : ""}>${esc(p.label)}</label>${desc}</div>`;
-  }
-  if (p.kind === "text") {
-    return `<label class="field">${esc(p.label)}<textarea rows="3" data-param="${esc(p.name)}">${esc(dflt)}</textarea>${desc}</label>`;
-  }
-  if (p.kind === "string") {
-    return `<label class="field">${esc(p.label)}<input type="text" data-param="${esc(p.name)}" value="${esc(dflt)}" autocomplete="off">${desc}</label>`;
-  }
-  return `<p class="muted">${esc(p.label)}: set in Jenkins (this kind of parameter isn't shown here, so Jenkins uses its default)</p>`;
+  return `<label class="field">${esc(p.label)}<select id="${esc(id)}" data-param="${esc(p.name)}">${p.choices.map(c =>
+    `<option value="${esc(c)}" ${c === p.default ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${desc}</label>`;
 }
 async function openRunForm(jobId) {
   const job = state.jobs.find(j => j.id === jobId);
@@ -822,7 +812,7 @@ async function openRunForm(jobId) {
   $("rdErr").hidden = true;
   $("rdRun").innerHTML = `${icon("play")}Run`;
   $("rdRun").disabled = true;
-  $("rdBody").innerHTML = `<p class="muted">Reading the job's options from Jenkins…</p>`;
+  $("rdBody").innerHTML = `<p class="muted">Loading…</p>`;
   if (!$("runDlg").open) $("runDlg").showModal();
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/params`).catch(() => null);
   const body = res ? await res.json().catch(() => ({})) : {};
@@ -834,7 +824,7 @@ async function openRunForm(jobId) {
     return;
   }
   runDlgFields = body.params;
-  $("rdBody").innerHTML = (body.params.length ? body.params.map(paramField).join("") : `<p class="muted">This Jenkins job has no options - it runs as configured in Jenkins.</p>`)
+  $("rdBody").innerHTML = (body.params.length ? body.params.map(paramField).join("") : `<p class="muted">Nothing to choose - it runs as configured in Jenkins.</p>`)
     + (job.warning ? `<div class="note">${icon("info")}<span>${esc(job.warning)}</span></div>` : "");
   syncDependents();
   const first = $("rdBody").querySelector("[data-param]");
@@ -845,7 +835,7 @@ let runDlgFields = [];
 const paramValue = (name) => {
   const els = [...$("rdBody").querySelectorAll(`[data-param="${CSS.escape(name)}"]`)];
   const el = els.find(e => e.type !== "radio" || e.checked);
-  return el ? (el.type === "checkbox" ? el.checked : el.value) : null;
+  return el ? el.value : null;
 };
 function syncDependents() {
   let ready = true;
@@ -872,7 +862,7 @@ $("rdForm").addEventListener("submit", async (ev) => {
   if (!runDlgJob) return;
   const params = {};
   $("rdBody").querySelectorAll("[data-param]").forEach(el => {
-    params[el.dataset.param] = el.type === "checkbox" ? el.checked : el.value;
+    if (el.type !== "radio" || el.checked) params[el.dataset.param] = el.value;
   });
   $("rdRun").disabled = true;
   $("rdRun").textContent = "Starting…";

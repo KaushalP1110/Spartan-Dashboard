@@ -147,30 +147,6 @@ def stop(build_url: str) -> None:
         pass
 
 
-# Jenkins parameter types the dashboard can ask for. Others (passwords, files,
-# plugin types such as Active Choices) are left to their Jenkins default.
-_PARAM_KINDS = {"ChoiceParameterDefinition": "choice", "StringParameterDefinition": "string",
-                "TextParameterDefinition": "text", "BooleanParameterDefinition": "bool"}
-
-
-def parameters(job: str) -> list[dict]:
-    """The build parameters the job defines in Jenkins ("This project is
-    parameterized"), in Jenkins' order: name, kind, description, choices, default."""
-    tree = "property[parameterDefinitions[name,type,description,choices,defaultParameterValue[value]]]"
-    info = _json(job_url(job) + "api/json?tree=" + urllib.parse.quote(tree, safe=",[]"))
-    params = []
-    for prop in info.get("property") or []:
-        for p in (prop or {}).get("parameterDefinitions") or []:
-            if not p.get("name"):
-                continue
-            default = (p.get("defaultParameterValue") or {}).get("value")
-            params.append({"name": p["name"], "kind": _PARAM_KINDS.get(p.get("type"), "unsupported"),
-                           "type": p.get("type"), "description": p.get("description") or "",
-                           "choices": [str(c) for c in p.get("choices") or []],
-                           "default": default})
-    return params
-
-
 def last_build(job: str) -> Optional[dict]:
     try:
         info = _json(job_url(job) + "lastBuild/api/json?tree=number,building,result,url,timestamp,duration")
