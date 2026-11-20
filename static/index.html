@@ -228,7 +228,34 @@
   .panel-head span { color: var(--muted); font-size: .82rem; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 11px 20px; border-bottom: 1px solid var(--border); font-size: .85rem; vertical-align: middle; white-space: nowrap; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: .85rem; vertical-align: middle; white-space: nowrap; }
+  th:first-child, td:first-child { padding-left: 20px; }
+  th:last-child, td:last-child { padding-right: 20px; }
+  /* Columns whose text can be long (names, "Environment: Live - Location: ...") wrap instead of widening the table. */
+  td.wrap, th.wrap { white-space: normal; overflow-wrap: anywhere; }
+  td.by { min-width: 130px; }
+  /* When a table has less room than its columns need (a narrow screen, or the details panel),
+     each run becomes a small card with a label before every value - nothing is cut off. */
+  .qwrap { container-type: inline-size; }
+  @container (max-width: 980px) {
+    .qwrap .stack-lg { display: block; }
+    .qwrap .stack-lg thead { display: none; }
+    .qwrap .stack-lg tbody, .qwrap .stack-lg tr { display: block; }
+    .qwrap .stack-lg tr { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .qwrap .stack-lg td { display: flex; gap: 12px; align-items: baseline; border: 0; padding: 3px 0; white-space: normal; background: none !important; }
+    .qwrap .stack-lg td::before { content: attr(data-label); flex: 0 0 96px; color: var(--muted); font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .qwrap .stack-lg td.wrap .job-cell { display: inline-flex; }
+    .qwrap .stack-lg td.by, .qwrap .stack-md td.by { min-width: 0; }
+    .qwrap .stack-lg td > *, .qwrap .stack-md td > * { min-width: 0; }
+  }
+  @container (max-width: 800px) {
+    .qwrap .stack-md { display: block; }
+    .qwrap .stack-md thead { display: none; }
+    .qwrap .stack-md tbody, .qwrap .stack-md tr { display: block; }
+    .qwrap .stack-md tr { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .qwrap .stack-md td { display: flex; gap: 12px; align-items: baseline; border: 0; padding: 3px 0; white-space: normal; background: none !important; }
+    .qwrap .stack-md td::before { content: attr(data-label); flex: 0 0 96px; color: var(--muted); font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  }
   th { background: var(--surface-2); color: var(--muted); font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   tbody tr:last-child td { border-bottom: 0; }
   tbody tr:hover td { background: var(--surface-2); }
@@ -272,7 +299,7 @@
   .run-dlg .check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
   .run-dlg .rd-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .run-dlg .muted { color: var(--muted); font-size: .82rem; margin: 0; }
-  .params { color: var(--text-2); font-size: .76rem; }
+  .params { color: var(--text-2); font-size: .76rem; white-space: normal; overflow-wrap: anywhere; }
   .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s; }
   .scrim.show { opacity: 1; pointer-events: auto; }
   .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100%); background: var(--bg); z-index: 50; box-shadow: var(--shadow-lg);
@@ -390,7 +417,7 @@
       <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="fSearch" type="search" placeholder="Search run by or automation" autocomplete="off"></label>
       <button class="btn btn-ghost" id="fClear" type="button" hidden>Clear</button>
     </div>
-    <div class="table-wrap"><table>
+    <div class="table-wrap qwrap"><table class="stack-lg">
       <thead><tr><th>Automation</th><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th><th>Log</th></tr></thead>
       <tbody id="recent"></tbody>
     </table></div>
@@ -436,7 +463,7 @@
     <div class="box"><h4>Results by group</h4><div id="dSections"></div></div>
     <div class="box"><h4 id="dFailTitle">Needs attention</h4><div id="dFailures"></div></div>
     <div class="box"><h4><span id="dLogTitle">Log</span><label><input type="checkbox" id="autoScroll" checked> Follow</label></h4><pre class="log" id="dLog"></pre></div>
-    <div class="box"><h4>Run history</h4><div class="table-wrap"><table>
+    <div class="box"><h4>Run history</h4><div class="table-wrap qwrap"><table class="stack-md">
       <thead><tr><th>Result</th><th>Passed</th><th>Started</th><th>Duration</th><th>Run by</th><th>Reports</th><th>Log</th></tr></thead>
       <tbody id="dHistory"></tbody></table></div></div>
   </div>
@@ -640,14 +667,14 @@ function historyRows(runs, withJob) {
     const c = counts(r);
     const job = state.jobs.find(j => j.id === r.job_id) || {kind: ""};
     return `<tr>
-      ${withJob ? `<td><a href="#" class="job-cell" data-open="${r.job_id}">${kindIc(job.kind)}${esc(r.job_name)}</a></td>` : ""}
-      <td>${chip(r.status)}</td>
-      <td class="num">${c ? `${c.passed}/${c.total}` : "-"}</td>
-      <td title="${esc(new Date(r.started_at).toLocaleString())}">${fmtTime(r.started_at)}</td>
-      <td class="num">${dur(r.started_at, r.finished_at)}</td>
-      <td>${esc(r.started_by || "-")}${r.params ? `<div class="params">${esc(paramsText(r.params))}</div>` : ""}</td>
-      <td>${rowLinks(reportFiles(r))}</td>
-      <td>${rowLinks(runLogs(r))}</td></tr>`;
+      ${withJob ? `<td class="wrap" data-label="Automation"><a href="#" class="job-cell" data-open="${r.job_id}">${kindIc(job.kind)}<span>${esc(r.job_name)}</span></a></td>` : ""}
+      <td data-label="Result">${chip(r.status)}</td>
+      <td class="num" data-label="Passed">${c ? `${c.passed}/${c.total}` : "-"}</td>
+      <td data-label="Started" title="${esc(new Date(r.started_at).toLocaleString())}">${fmtTime(r.started_at)}</td>
+      <td class="num" data-label="Duration">${dur(r.started_at, r.finished_at)}</td>
+      <td class="wrap by" data-label="Run by"><div>${esc(r.started_by || "-")}${r.params ? `<div class="params">${esc(paramsText(r.params))}</div>` : ""}</div></td>
+      <td data-label="Reports">${rowLinks(reportFiles(r))}</td>
+      <td data-label="Log">${rowLinks(runLogs(r))}</td></tr>`;
   }).join("");
 }
 
